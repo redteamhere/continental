@@ -82,6 +82,17 @@ class NotificationService:
             type="funds_confirmed",
         )
 
+    async def seller_delivered(self, deal: Deal, buyer: User, seller: User) -> None:
+        await self._send(
+            buyer,
+            f"📦 <b>Seller Marked as Delivered!</b>\n\n"
+            f"Deal: <code>{deal.deal_number}</code>\n"
+            f"{seller.display_name} says the work is done.\n\n"
+            f"✅ If you're satisfied — open the deal and tap <b>Release Funds</b>.\n"
+            f"⚖️ If there's a problem — tap <b>Open Dispute</b>.",
+            type="seller_delivered",
+        )
+
     async def deal_completed(self, deal: Deal, buyer: User, seller: User) -> None:
         await self._send(
             seller,

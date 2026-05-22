@@ -469,6 +469,40 @@ async def release_pin_verify(message: Message, state: FSMContext, db_user) -> No
     )
 
 
+# ── Seller marks as delivered ────────────────────────────────
+
+@router.callback_query(F.data.startswith("deal:delivered:"))
+async def seller_mark_delivered(callback: CallbackQuery, db_user) -> None:
+    deal_id = int(callback.data.split(":")[2])
+
+    async with AsyncSessionFactory() as session:
+        deal_svc = DealService(session)
+        notif_svc = NotificationService(session, callback.bot)
+
+        deal = await deal_svc.get_by_id(deal_id)
+        if not deal or deal.seller_id != db_user.id:
+            await callback.answer("Not authorized.", show_alert=True)
+            return
+        if deal.status != DealStatus.FUNDED:
+            await callback.answer("Deal is not in funded status.", show_alert=True)
+            return
+
+        await deal_svc.start_progress(deal)
+
+        buyer = await UserService(session).get_by_id(deal.buyer_id)
+        await notif_svc.seller_delivered(deal, buyer, db_user)
+        await session.commit()
+
+    await callback.message.edit_text(
+        f"📦 <b>Marked as Delivered</b>\n\n"
+        f"Deal <code>{deal.deal_number}</code>\n"
+        f"The buyer has been notified to release funds.",
+        reply_markup=back_kb("menu:my_deals"),
+        parse_mode="HTML",
+    )
+    await callback.answer()
+
+
 # ── Cancel deal ──────────────────────────────────────────────
 
 @router.callback_query(F.data.startswith("deal:cancel:"))

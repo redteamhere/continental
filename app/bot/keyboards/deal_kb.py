@@ -68,6 +68,9 @@ def deal_action_kb(deal: Deal, viewer_id: int) -> InlineKeyboardMarkup:
             )
         if is_seller:
             builder.row(
+                InlineKeyboardButton(text="📦 Mark as Delivered", callback_data=f"deal:delivered:{deal.id}"),
+            )
+            builder.row(
                 InlineKeyboardButton(text="⚖️ Open Dispute", callback_data=f"deal:dispute:{deal.id}"),
             )
 

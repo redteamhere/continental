@@ -7,7 +7,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery
 
 from app.bot.keyboards.main_menu import main_menu_kb, back_kb
-from app.bot.keyboards.pin_kb import pin_dots, pin_pad_kb, pin_webapp_kb
+from app.bot.keyboards.pin_kb import pin_dots, pin_pad_kb, pin_webapp_kb, pin_remove_kb
 from app.bot.handlers.pin_input import build_pin_message
 from app.config import settings as _settings
 from app.bot.states.registration import RegistrationStates
@@ -62,7 +62,7 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
             if _settings.WEB_APP_URL:
                 await message.answer(
                     "🔐 <b>Create your PIN</b>\n\nTap the button below to set a secure 4–8 digit PIN.",
-                    reply_markup=pin_webapp_kb(_settings.WEB_APP_URL, "set", "pin:cancel_reg"),
+                    reply_markup=pin_webapp_kb(_settings.WEB_APP_URL, "set"),
                     parse_mode="HTML",
                 )
             else:

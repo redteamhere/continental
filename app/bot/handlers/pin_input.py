@@ -12,7 +12,7 @@ from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
-from app.bot.keyboards.pin_kb import MAX_PIN, pin_dots, pin_pad_kb
+from app.bot.keyboards.pin_kb import MAX_PIN, pin_dots, pin_pad_kb, pin_remove_kb
 from app.bot.keyboards.main_menu import main_menu_kb
 from app.bot.states.deal_creation import DealCreationStates
 from app.bot.states.registration import RegistrationStates
@@ -179,13 +179,15 @@ async def _webapp_register(message: Message, state: FSMContext, pin: str) -> Non
         await session.commit()
 
     await state.clear()
+    # First remove the reply keyboard, then show the inline main menu
     await message.answer(
         f"🎉 <b>Account created!</b>\n\n"
         f"Your referral code: <code>{user.referral_code}</code>\n\n"
         f"You're all set. Explore the menu below.",
-        reply_markup=_menu_kb(),
+        reply_markup=pin_remove_kb(),
         parse_mode="HTML",
     )
+    await message.answer("🏠 <b>Main Menu</b>", reply_markup=_menu_kb(), parse_mode="HTML")
 
 
 async def _webapp_deal_pin(message: Message, state: FSMContext, pin: str) -> None:
@@ -219,14 +221,12 @@ async def _webapp_deal_pin(message: Message, state: FSMContext, pin: str) -> Non
 
 
 async def _webapp_release_pin(message: Message, state: FSMContext, pin: str) -> None:
-    from datetime import datetime, timezone
     from app.database import AsyncSessionFactory
     from app.services.user_service import UserService
     from app.services.audit_service import AuditService
     from app.services.deal_service import DealService
     from app.services.escrow_service import EscrowService
     from app.services.notification_service import NotificationService
-    from app.bot.keyboards.deal_kb import review_stars_kb
     from app.security.pin_manager import PinManager
 
     data = await state.get_data()
@@ -272,6 +272,8 @@ async def _webapp_release_pin(message: Message, state: FSMContext, pin: str) -> 
     await message.answer(
         f"✅ <b>Funds Released!</b>\n\nDeal <code>{deal.deal_number}</code> is complete.\n"
         f"Please leave a review for the seller.",
-        reply_markup=review_stars_kb(deal.id),
+        reply_markup=pin_remove_kb(),
         parse_mode="HTML",
     )
+    from app.bot.keyboards.deal_kb import review_stars_kb as _stars_kb
+    await message.answer("⭐ Rate the seller:", reply_markup=_stars_kb(deal.id))

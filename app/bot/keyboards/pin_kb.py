@@ -1,5 +1,9 @@
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
-from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.types import (
+    InlineKeyboardMarkup, InlineKeyboardButton,
+    ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove,
+    WebAppInfo,
+)
+from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 
 MIN_PIN = 4
 MAX_PIN = 8
@@ -12,16 +16,20 @@ def pin_dots(count: int) -> str:
     return "  ".join(parts)
 
 
-def pin_webapp_kb(base_url: str, mode: str, cancel_data: str = "pin:cancel") -> InlineKeyboardMarkup:
-    """Opens the HTML PIN screen inside Telegram (Mini App)."""
+def pin_webapp_kb(base_url: str, mode: str) -> ReplyKeyboardMarkup:
+    """
+    Reply keyboard that opens the HTML PIN Mini App.
+    sendData() ONLY works from a reply keyboard button — not inline keyboard.
+    """
     url = f"{base_url}?mode={mode}"
-    builder = InlineKeyboardBuilder()
-    builder.row(InlineKeyboardButton(
-        text="🔐 Enter PIN",
-        web_app=WebAppInfo(url=url),
-    ))
-    builder.row(InlineKeyboardButton(text="✕ Cancel", callback_data=cancel_data))
-    return builder.as_markup()
+    builder = ReplyKeyboardBuilder()
+    builder.add(KeyboardButton(text="🔐 Enter PIN", web_app=WebAppInfo(url=url)))
+    return builder.as_markup(resize_keyboard=True, one_time_keyboard=True)
+
+
+def pin_remove_kb() -> ReplyKeyboardRemove:
+    """Remove the reply keyboard after PIN is received."""
+    return ReplyKeyboardRemove()
 
 
 def pin_pad_kb(digits: int, cancel_data: str = "pin:cancel") -> InlineKeyboardMarkup:

@@ -179,7 +179,7 @@ async def deal_enter_terms(message: Message, state: FSMContext) -> None:
     if settings.WEB_APP_URL:
         await message.answer(
             "🔐 <b>Enter PIN to confirm deal</b>",
-            reply_markup=pin_webapp_kb(settings.WEB_APP_URL, "verify", "deal:cancel_creation"),
+            reply_markup=pin_webapp_kb(settings.WEB_APP_URL, "verify"),
             parse_mode="HTML",
         )
     else:
@@ -429,7 +429,7 @@ async def release_funds(callback: CallbackQuery, state: FSMContext, db_user) -> 
     if settings.WEB_APP_URL:
         await callback.message.answer(
             "🔐 <b>Enter PIN to release funds</b>",
-            reply_markup=pin_webapp_kb(settings.WEB_APP_URL, "verify", "pin:cancel"),
+            reply_markup=pin_webapp_kb(settings.WEB_APP_URL, "verify"),
             parse_mode="HTML",
         )
     else:

@@ -141,6 +141,27 @@ async def menu_main(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
 
 
+@router.message(Command("help"))
+async def cmd_help(message: Message) -> None:
+    text = (
+        "ℹ️ <b>EscrowBot Help</b>\n\n"
+        "<b>Creating a deal:</b>\n"
+        "→ Tap 'New Deal', enter seller's username and deal details.\n\n"
+        "<b>Paying for a deal:</b>\n"
+        "→ After seller accepts, fund the escrow wallet shown.\n\n"
+        "<b>Releasing funds:</b>\n"
+        "→ When satisfied, tap 'Release Funds' to pay the seller.\n\n"
+        "<b>Disputes:</b>\n"
+        "→ If issues arise, tap 'Open Dispute'. Upload evidence.\n"
+        "→ A moderator will review within 24–48 hours.\n\n"
+        "<b>Security:</b>\n"
+        "→ Never share your PIN.\n"
+        "→ This bot never asks for private keys.\n\n"
+        "Support: @EscrowBotSupport"
+    )
+    await message.answer(text, parse_mode="HTML")
+
+
 @router.callback_query(F.data == "menu:help")
 async def menu_help(callback: CallbackQuery) -> None:
     text = (

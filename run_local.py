@@ -10,6 +10,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.redis import RedisStorage
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.types import BotCommand, BotCommandScopeDefault, BotCommandScopeChat
 from loguru import logger
 
 from app.config import settings
@@ -56,6 +57,23 @@ async def main():
     scheduler = create_scheduler(bot)
     scheduler.start()
     logger.info("Background scheduler started.")
+
+    # Register bot commands in Telegram menu
+    user_commands = [
+        BotCommand(command="start", description="Start / open main menu"),
+        BotCommand(command="help",  description="How to use this bot"),
+    ]
+    admin_commands = user_commands + [
+        BotCommand(command="admin",   description="Open admin panel"),
+        BotCommand(command="sim_pay", description="[DEV] Simulate payment for a deal"),
+    ]
+
+    await bot.set_my_commands(user_commands, scope=BotCommandScopeDefault())
+    for admin_id in settings.ADMIN_IDS:
+        try:
+            await bot.set_my_commands(admin_commands, scope=BotCommandScopeChat(chat_id=admin_id))
+        except Exception as e:
+            logger.warning(f"Could not set admin commands for {admin_id}: {e}")
 
     me = await bot.get_me()
     logger.info(f"Bot started: @{me.username} — polling mode")

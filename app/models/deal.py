@@ -6,6 +6,7 @@ from decimal import Decimal
 from typing import Optional
 
 from sqlalchemy import (
+    BigInteger,
     DateTime,
     Enum,
     ForeignKey,
@@ -97,6 +98,10 @@ class Deal(Base):
     # Cancellation
     cancellation_reason: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     cancelled_by_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
+
+    # Deal Chat (private Telegram supergroup)
+    chat_group_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    chat_invite_link: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
 
     # Key timestamps
     funded_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)

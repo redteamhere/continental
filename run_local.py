@@ -13,12 +13,28 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import BotCommand, BotCommandScopeDefault, BotCommandScopeChat
 from loguru import logger
 
+from sqlalchemy import text
+
 from app.config import settings
-from app.database import create_tables
+from app.database import create_tables, engine
 from app.bot.handlers import get_main_router
 from app.bot.middleware.auth import AuthMiddleware
 from app.bot.middleware.rate_limit import RateLimitMiddleware
 from app.workers.scheduler import create_scheduler
+
+
+async def _migrate_columns() -> None:
+    """Add any new columns that didn't exist when the table was first created."""
+    stmts = [
+        "ALTER TABLE deals ADD COLUMN IF NOT EXISTS chat_group_id BIGINT",
+        "ALTER TABLE deals ADD COLUMN IF NOT EXISTS chat_invite_link VARCHAR(256)",
+    ]
+    async with engine.begin() as conn:
+        for stmt in stmts:
+            try:
+                await conn.execute(text(stmt))
+            except Exception as e:
+                logger.warning(f"Migration skipped ({stmt[:50]}...): {e}")
 
 
 async def main():
@@ -28,6 +44,7 @@ async def main():
 
     logger.info("Creating database tables...")
     await create_tables()
+    await _migrate_columns()
     logger.info("Tables ready.")
 
     # Use MemoryStorage if Redis is not configured (simpler local dev)

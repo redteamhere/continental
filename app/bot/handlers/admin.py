@@ -388,10 +388,16 @@ async def sim_pay(message: Message) -> None:
         await notif.payment_confirmed(deal, buyer, seller)
 
         await session.commit()
+        funded_deal_id = deal.id
+
+    # Spin up private group for buyer + seller (runs in background)
+    import asyncio
+    from app.services.group_service import create_and_notify_group
+    asyncio.create_task(create_and_notify_group(funded_deal_id, message.bot))
 
     await message.answer(
         f"✅ <b>[LOCAL_DEV] Payment simulated</b>\n\n"
         f"Deal <code>{deal_number}</code> is now <b>FUNDED</b>.\n"
-        f"Both parties have been notified.",
+        f"Both parties have been notified and a private group is being created.",
         parse_mode="HTML",
     )

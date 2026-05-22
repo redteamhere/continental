@@ -140,6 +140,13 @@ class NotificationService:
                 type="dispute_resolved",
             )
 
+    async def chat_message(self, recipient: User, sender_role: str, deal_number: str, text: str) -> None:
+        await self._send(
+            recipient,
+            f"💬 <b>{sender_role} [{deal_number}]:</b>\n{text}",
+            type="chat_message",
+        )
+
     async def deadline_warning(self, deal: Deal, buyer: User, seller: User) -> None:
         for user in (buyer, seller):
             await self._send(

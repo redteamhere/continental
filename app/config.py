@@ -85,6 +85,10 @@ class Settings(BaseSettings):
     # ── HD Wallet master seed ────────────────────────────────
     MASTER_MNEMONIC: str = ""
 
+    # ── Telegram MTProto (for deal group creation via Telethon) ─────────────
+    TELEGRAM_API_ID: int = 0       # from https://my.telegram.org/apps
+    TELEGRAM_API_HASH: str = ""    # from https://my.telegram.org/apps
+
     # ── Web App (Telegram Mini App) ──────────────────────────
     WEB_APP_URL: str = ""   # e.g. https://yourname.github.io/continental/webapp/pin.html
 

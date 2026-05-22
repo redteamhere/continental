@@ -73,12 +73,20 @@ def deal_action_kb(deal: Deal, viewer_id: int) -> InlineKeyboardMarkup:
             builder.row(
                 InlineKeyboardButton(text="⚖️ Open Dispute", callback_data=f"deal:dispute:{deal.id}"),
             )
+        if is_buyer or is_seller:
+            builder.row(
+                InlineKeyboardButton(text="💬 Deal Chat", callback_data=f"deal:chat:{deal.id}"),
+            )
 
     elif deal.status == DealStatus.IN_PROGRESS:
         if is_buyer:
             builder.row(
                 InlineKeyboardButton(text="✅ Release Funds", callback_data=f"deal:release:{deal.id}"),
                 InlineKeyboardButton(text="⚖️ Open Dispute", callback_data=f"deal:dispute:{deal.id}"),
+            )
+        if is_buyer or is_seller:
+            builder.row(
+                InlineKeyboardButton(text="💬 Deal Chat", callback_data=f"deal:chat:{deal.id}"),
             )
 
     elif deal.status == DealStatus.COMPLETED and (is_buyer or is_seller):

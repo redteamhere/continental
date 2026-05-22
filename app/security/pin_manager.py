@@ -1,41 +1,40 @@
-"""PIN hashing and verification with brute-force protection."""
+"""PIN hashing and verification using bcrypt directly (passlib-free)."""
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from passlib.context import CryptContext
-
-# bcrypt with a high work factor
-_pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__rounds=12)
+import bcrypt
 
 MAX_ATTEMPTS = 5
 LOCKOUT_MINUTES = 30
+_ROUNDS = 12
 
 
 class PinManager:
     @staticmethod
     def hash_pin(pin: str) -> str:
-        """Return bcrypt hash of a 4–8 digit PIN."""
         if not pin.isdigit() or not (4 <= len(pin) <= 8):
             raise ValueError("PIN must be 4–8 digits")
-        return _pwd_ctx.hash(pin)
+        salt = bcrypt.gensalt(rounds=_ROUNDS)
+        hashed = bcrypt.hashpw(pin.encode("utf-8"), salt)
+        return hashed.decode("utf-8")
 
     @staticmethod
     def verify_pin(pin: str, pin_hash: str) -> bool:
-        """Verify PIN against stored hash. Safe against timing attacks."""
-        return _pwd_ctx.verify(pin, pin_hash)
+        try:
+            return bcrypt.checkpw(pin.encode("utf-8"), pin_hash.encode("utf-8"))
+        except Exception:
+            return False
 
     @staticmethod
     def is_locked(pin_locked_until: Optional[datetime]) -> bool:
-        """Return True if the account is currently locked out."""
         if pin_locked_until is None:
             return False
         return datetime.now(timezone.utc) < pin_locked_until
 
     @staticmethod
     def lockout_until() -> datetime:
-        """Calculate the unlock timestamp after max failed attempts."""
         return datetime.now(timezone.utc) + timedelta(minutes=LOCKOUT_MINUTES)
 
     @staticmethod

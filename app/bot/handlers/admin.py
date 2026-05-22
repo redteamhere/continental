@@ -1,6 +1,7 @@
 """Admin and moderator panel."""
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from aiogram import F, Router
@@ -8,14 +9,16 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
+from sqlalchemy import select
 
 from app.bot.keyboards.admin_kb import admin_panel_kb, dispute_resolve_kb, user_action_kb
 from app.bot.keyboards.main_menu import back_kb
 from app.bot.states.dispute import AdminResolveStates
 from app.config import settings
 from app.database import AsyncSessionFactory
-from app.models.deal import DealStatus
+from app.models.deal import Deal, DealStatus
 from app.models.dispute import Dispute, DisputeStatus, ResolutionType
+from app.models.wallet import Wallet
 from app.services.audit_service import AuditService
 from app.services.deal_service import DealService
 from app.services.escrow_service import EscrowService
@@ -324,3 +327,71 @@ async def admin_stats(callback: CallbackQuery, db_user) -> None:
     )
     await callback.message.edit_text(text, reply_markup=back_kb("admin:panel"), parse_mode="HTML")
     await callback.answer()
+
+
+# ── LOCAL_DEV: simulate payment ───────────────────────────────
+
+@router.message(Command("sim_pay"))
+async def sim_pay(message: Message) -> None:
+    """Admin-only: instantly mark a deal as FUNDED (LOCAL_DEV mode only)."""
+    if not settings.LOCAL_DEV:
+        await message.answer("❌ /sim_pay is only available in LOCAL_DEV mode.")
+        return
+
+    parts = message.text.strip().split(maxsplit=1)
+    if len(parts) < 2:
+        await message.answer(
+            "Usage: <code>/sim_pay DEAL-XXXXXX</code>\n"
+            "Example: <code>/sim_pay DEAL-A1B2C3</code>",
+            parse_mode="HTML",
+        )
+        return
+
+    deal_number = parts[1].strip().upper()
+
+    async with AsyncSessionFactory() as session:
+        result = await session.execute(
+            select(Deal).where(Deal.deal_number == deal_number)
+        )
+        deal = result.scalar_one_or_none()
+
+        if not deal:
+            await message.answer(f"❌ Deal <code>{deal_number}</code> not found.", parse_mode="HTML")
+            return
+
+        if deal.status != DealStatus.AWAITING_PAYMENT:
+            await message.answer(
+                f"❌ Deal is in <b>{deal.status.value}</b> status — can only simulate payment for <b>awaiting_payment</b> deals.",
+                parse_mode="HTML",
+            )
+            return
+
+        # Mark deal as funded
+        deal.status = DealStatus.FUNDED
+        deal.funded_at = datetime.now(timezone.utc)
+
+        # Update wallet balance so the rest of the flow works
+        if deal.escrow_wallet_id:
+            wallet_result = await session.execute(
+                select(Wallet).where(Wallet.id == deal.escrow_wallet_id)
+            )
+            wallet = wallet_result.scalar_one_or_none()
+            if wallet:
+                wallet.confirmed_balance = deal.amount
+
+        # Notify both parties
+        svc = UserService(session)
+        buyer = await svc.get_by_id(deal.buyer_id)
+        seller = await svc.get_by_id(deal.seller_id)
+
+        notif = NotificationService(session, message.bot)
+        await notif.payment_confirmed(deal, buyer, seller)
+
+        await session.commit()
+
+    await message.answer(
+        f"✅ <b>[LOCAL_DEV] Payment simulated</b>\n\n"
+        f"Deal <code>{deal_number}</code> is now <b>FUNDED</b>.\n"
+        f"Both parties have been notified.",
+        parse_mode="HTML",
+    )

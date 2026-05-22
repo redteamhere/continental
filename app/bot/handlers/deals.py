@@ -14,6 +14,7 @@ from app.bot.keyboards.deal_kb import (
     deal_action_kb,
     review_stars_kb,
 )
+from app.models.audit import Review
 from app.bot.keyboards.main_menu import back_kb, deals_list_kb, main_menu_kb
 from app.bot.states.deal_creation import DealCreationStates
 from app.config import settings
@@ -563,9 +564,6 @@ async def submit_review(callback: CallbackQuery, db_user) -> None:
     rating = int(rating_str)
 
     async with AsyncSessionFactory() as session:
-        from app.models.audit import Review
-        from app.database import AsyncSessionFactory
-
         deal_svc = DealService(session)
         deal = await deal_svc.get_by_id(deal_id)
         if not deal or deal.buyer_id != db_user.id:

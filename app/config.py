@@ -85,6 +85,9 @@ class Settings(BaseSettings):
     # ── HD Wallet master seed ────────────────────────────────
     MASTER_MNEMONIC: str = ""
 
+    # ── Web App (Telegram Mini App) ──────────────────────────
+    WEB_APP_URL: str = ""   # e.g. https://yourname.github.io/continental/webapp/pin.html
+
     # ── App ──────────────────────────────────────────────────
     ENVIRONMENT: str = "production"
     DEBUG: bool = False

@@ -17,7 +17,7 @@ from app.bot.keyboards.deal_kb import (
 )
 from app.models.audit import Review
 from app.bot.keyboards.main_menu import back_kb, deals_list_kb, main_menu_kb
-from app.bot.keyboards.pin_kb import pin_pad_kb, pin_dots
+from app.bot.keyboards.pin_kb import pin_pad_kb, pin_dots, pin_webapp_kb
 from app.bot.handlers.pin_input import build_pin_message
 from app.bot.states.deal_creation import DealCreationStates
 from app.config import settings
@@ -175,10 +175,16 @@ async def deal_enter_terms(message: Message, state: FSMContext) -> None:
 
     await state.update_data(pin_buffer="")
     await state.set_state(DealCreationStates.confirm_pin)
-    # Send summary first, then PIN pad
     await message.answer(summary, parse_mode="HTML")
-    pin_text, pin_kb = build_pin_message(DealCreationStates.confirm_pin.state, 0)
-    await message.answer(pin_text, reply_markup=pin_kb, parse_mode="HTML")
+    if settings.WEB_APP_URL:
+        await message.answer(
+            "🔐 <b>Enter PIN to confirm deal</b>",
+            reply_markup=pin_webapp_kb(settings.WEB_APP_URL, "verify", "deal:cancel_creation"),
+            parse_mode="HTML",
+        )
+    else:
+        pin_text, pin_kb = build_pin_message(DealCreationStates.confirm_pin.state, 0)
+        await message.answer(pin_text, reply_markup=pin_kb, parse_mode="HTML")
 
 
 @router.callback_query(F.data == "pin:submit", DealCreationStates.confirm_pin)
@@ -420,8 +426,15 @@ async def release_funds(callback: CallbackQuery, state: FSMContext, db_user) -> 
     await state.update_data(pending_release_deal_id=deal_id, pin_buffer="")
     await state.set_state(ReleasePinState.verify)
 
-    pin_text, pin_kb = build_pin_message(ReleasePinState.verify.state, 0)
-    await callback.message.answer(pin_text, reply_markup=pin_kb, parse_mode="HTML")
+    if settings.WEB_APP_URL:
+        await callback.message.answer(
+            "🔐 <b>Enter PIN to release funds</b>",
+            reply_markup=pin_webapp_kb(settings.WEB_APP_URL, "verify", "pin:cancel"),
+            parse_mode="HTML",
+        )
+    else:
+        pin_text, pin_kb = build_pin_message(ReleasePinState.verify.state, 0)
+        await callback.message.answer(pin_text, reply_markup=pin_kb, parse_mode="HTML")
     await callback.answer()
 
 

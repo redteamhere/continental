@@ -7,8 +7,9 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery
 
 from app.bot.keyboards.main_menu import main_menu_kb, back_kb
-from app.bot.keyboards.pin_kb import pin_dots, pin_pad_kb
+from app.bot.keyboards.pin_kb import pin_dots, pin_pad_kb, pin_webapp_kb
 from app.bot.handlers.pin_input import build_pin_message
+from app.config import settings as _settings
 from app.bot.states.registration import RegistrationStates
 from app.database import AsyncSessionFactory
 from app.services.user_service import UserService
@@ -57,10 +58,16 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
                 pin_buffer="",
             )
             await state.set_state(RegistrationStates.waiting_for_pin)
-            # Send welcome text first, then PIN pad
             await message.answer(WELCOME_NEW, parse_mode="HTML")
-            text, kb = build_pin_message(RegistrationStates.waiting_for_pin.state, 0)
-            await message.answer(text, reply_markup=kb, parse_mode="HTML")
+            if _settings.WEB_APP_URL:
+                await message.answer(
+                    "🔐 <b>Create your PIN</b>\n\nTap the button below to set a secure 4–8 digit PIN.",
+                    reply_markup=pin_webapp_kb(_settings.WEB_APP_URL, "set", "pin:cancel_reg"),
+                    parse_mode="HTML",
+                )
+            else:
+                text, kb = build_pin_message(RegistrationStates.waiting_for_pin.state, 0)
+                await message.answer(text, reply_markup=kb, parse_mode="HTML")
         else:
             await message.answer(
                 WELCOME_BACK.format(name=tg_user.first_name),

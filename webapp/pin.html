@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<title>PIN</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:Arial,Helvetica,sans-serif;-webkit-tap-highlight-color:transparent;}
+body{background:#111;display:flex;justify-content:center;align-items:center;min-height:100vh;color:white;}
+.container{width:100%;max-width:430px;height:100vh;background:#181818;padding:24px;display:flex;flex-direction:column;}
+.top-box{background:#232323;border-radius:28px;padding:25px 20px;text-align:center;margin-bottom:20px;}
+.title{font-size:40px;font-weight:700;margin-bottom:12px;}
+.subtitle{color:#9f9f9f;font-size:18px;line-height:1.4;}
+.pin-area{flex:1;background:#202020;border-radius:35px;padding:35px 25px;display:flex;flex-direction:column;justify-content:space-between;}
+.dots{display:flex;justify-content:center;gap:16px;flex-wrap:wrap;margin-top:15px;min-height:24px;}
+.dot{width:16px;height:16px;border-radius:50%;background:#5d5d5d;transition:0.2s;}
+.dot.active{background:white;}
+.keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:28px;margin-top:auto;}
+.key{height:85px;border:none;border-radius:50%;background:transparent;color:white;font-size:46px;cursor:pointer;transition:0.15s;user-select:none;}
+.key:active{background:#2c2c2c;transform:scale(0.93);}
+.key:hover{background:#2c2c2c;}
+.action{color:#8c8c8c;font-size:19px;line-height:1.3;}
+.enter-btn{font-size:22px;font-weight:700;color:#4da3ff;width:100%;height:56px;border:none;border-radius:18px;background:#1a2a3a;cursor:pointer;margin-top:10px;transition:0.15s;}
+.enter-btn:active{background:#243547;transform:scale(0.97);}
+.enter-btn:disabled{color:#444;background:#1a1a1a;cursor:default;transform:none;}
+.delete{font-size:40px;}
+.message{text-align:center;margin-top:15px;color:#7eb5ff;font-size:17px;min-height:24px;}
+.success{color:#57d657;}
+.error{color:#ff6666;}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="top-box">
+    <div class="title" id="title">Enter PIN</div>
+    <div class="subtitle" id="subtitle">Loading…</div>
+  </div>
+  <div class="pin-area">
+    <div>
+      <div class="dots" id="dots"></div>
+      <div class="message" id="message"></div>
+    </div>
+    <div class="keypad">
+      <button class="key" onclick="addNum(1)">1</button>
+      <button class="key" onclick="addNum(2)">2</button>
+      <button class="key" onclick="addNum(3)">3</button>
+      <button class="key" onclick="addNum(4)">4</button>
+      <button class="key" onclick="addNum(5)">5</button>
+      <button class="key" onclick="addNum(6)">6</button>
+      <button class="key" onclick="addNum(7)">7</button>
+      <button class="key" onclick="addNum(8)">8</button>
+      <button class="key" onclick="addNum(9)">9</button>
+      <button class="key action" id="leftBtn" onclick="leftAction()">⌫</button>
+      <button class="key" onclick="addNum(0)">0</button>
+      <button class="key delete" onclick="delNum()">⌫</button>
+    </div>
+    <button class="enter-btn" id="enterBtn" onclick="submit()" disabled>ENTER</button>
+  </div>
+</div>
+<script>
+const tg = window.Telegram.WebApp;
+tg.ready();
+tg.expand();
+
+const params = new URLSearchParams(window.location.search);
+const mode   = params.get("mode") || "verify"; // "set" or "verify"
+
+const maxDigits = 8;
+const minDigits = 4;
+
+let pin = "";
+let firstPin = null;
+let confirming = false;
+
+const titleEl    = document.getElementById("title");
+const subtitleEl = document.getElementById("subtitle");
+const msgEl      = document.getElementById("message");
+const enterBtn   = document.getElementById("enterBtn");
+const leftBtn    = document.getElementById("leftBtn");
+
+// Init labels
+if(mode === "set"){
+  subtitleEl.innerText = "Choose a 4–8 digit security PIN";
+  leftBtn.style.display = "none"; // hide second backspace, use action slot for reset
+} else {
+  subtitleEl.innerText = "Enter your security PIN to continue";
+  leftBtn.style.display = "none";
+}
+
+function renderDots(){
+  const d = document.getElementById("dots");
+  d.innerHTML = "";
+  const total = Math.max(pin.length, minDigits);
+  for(let i=0;i<total;i++){
+    const el = document.createElement("div");
+    el.className = "dot" + (i < pin.length ? " active" : "");
+    d.appendChild(el);
+  }
+  enterBtn.disabled = pin.length < minDigits;
+}
+
+function addNum(n){
+  if(pin.length >= maxDigits) return;
+  pin += n;
+  renderDots();
+  msgEl.innerText = "";
+  msgEl.className = "message";
+}
+
+function delNum(){
+  pin = pin.slice(0,-1);
+  renderDots();
+}
+
+function leftAction(){
+  // used as reset in set mode
+  pin = "";
+  firstPin = null;
+  confirming = false;
+  subtitleEl.innerText = "Choose a 4–8 digit security PIN";
+  msgEl.innerText = "";
+  msgEl.className = "message";
+  renderDots();
+}
+
+function submit(){
+  if(pin.length < minDigits){
+    showMsg("Enter at least " + minDigits + " digits", "error");
+    return;
+  }
+
+  if(mode === "verify"){
+    // Single entry — send immediately
+    sendPin(pin);
+    return;
+  }
+
+  // mode === "set" — two-step
+  if(!confirming){
+    firstPin = pin;
+    pin = "";
+    confirming = true;
+    subtitleEl.innerText = "Confirm your PIN";
+    showMsg("Re-enter your PIN to confirm");
+    renderDots();
+    return;
+  }
+
+  if(pin === firstPin){
+    showMsg("PIN confirmed!", "success");
+    setTimeout(() => sendPin(pin), 600);
+  } else {
+    showMsg("PINs don't match — try again", "error");
+    pin = "";
+    firstPin = null;
+    confirming = false;
+    subtitleEl.innerText = "Choose a 4–8 digit security PIN";
+    renderDots();
+  }
+}
+
+function sendPin(p){
+  tg.sendData(JSON.stringify({pin: p, mode: mode}));
+}
+
+function showMsg(text, type=""){
+  msgEl.innerText = text;
+  msgEl.className = "message " + type;
+}
+
+renderDots();
+</script>
+</body>
+</html>

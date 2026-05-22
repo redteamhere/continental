@@ -1,4 +1,4 @@
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 MIN_PIN = 4
@@ -10,6 +10,18 @@ def pin_dots(count: int) -> str:
     total = max(count, MIN_PIN)
     parts = ["●" if i < count else "○" for i in range(total)]
     return "  ".join(parts)
+
+
+def pin_webapp_kb(base_url: str, mode: str, cancel_data: str = "pin:cancel") -> InlineKeyboardMarkup:
+    """Opens the HTML PIN screen inside Telegram (Mini App)."""
+    url = f"{base_url}?mode={mode}"
+    builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(
+        text="🔐 Enter PIN",
+        web_app=WebAppInfo(url=url),
+    ))
+    builder.row(InlineKeyboardButton(text="✕ Cancel", callback_data=cancel_data))
+    return builder.as_markup()
 
 
 def pin_pad_kb(digits: int, cancel_data: str = "pin:cancel") -> InlineKeyboardMarkup:

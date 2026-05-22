@@ -21,13 +21,9 @@ from app.security.encryption import encrypt_private_key, decrypt_private_key
 
 
 def _get_wallet_generator() -> WalletGenerator:
-    """
-    Load master mnemonic from environment.
-    In production store this in a Hardware Security Module or secret manager.
-    """
-    mnemonic = os.environ.get("MASTER_MNEMONIC")
+    mnemonic = settings.MASTER_MNEMONIC
     if not mnemonic:
-        raise RuntimeError("MASTER_MNEMONIC environment variable not set")
+        raise RuntimeError("MASTER_MNEMONIC not set in .env")
     return WalletGenerator(mnemonic)
 
 

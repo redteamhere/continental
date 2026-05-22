@@ -28,8 +28,15 @@ class Settings(BaseSettings):
     @classmethod
     def parse_admin_ids(cls, v):
         if isinstance(v, str):
-            return [int(x.strip()) for x in v.split(",") if x.strip()]
-        return v
+            v = v.strip()
+            # Accept JSON array: "[123,456]" or "[]"
+            if v.startswith("["):
+                import json
+                parsed = json.loads(v) if v else []
+                return [int(x) for x in parsed if str(x).strip()]
+            # Accept comma-separated: "123,456"
+            return [int(x.strip()) for x in v.split(",") if x.strip().isdigit()]
+        return v or []
 
     # ── Database ─────────────────────────────────────────────
     DATABASE_URL: str = "postgresql+asyncpg://user:pass@localhost/escrow_bot"
@@ -72,10 +79,14 @@ class Settings(BaseSettings):
     # ── Referral ─────────────────────────────────────────────
     REFERRAL_BONUS_PERCENT: float = 0.1
 
+    # ── HD Wallet master seed ────────────────────────────────
+    MASTER_MNEMONIC: str = ""
+
     # ── App ──────────────────────────────────────────────────
     ENVIRONMENT: str = "production"
     DEBUG: bool = False
     LOG_LEVEL: str = "INFO"
+    LOCAL_DEV: bool = False
 
     @property
     def is_production(self) -> bool:

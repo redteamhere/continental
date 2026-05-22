@@ -17,15 +17,34 @@ class Base(DeclarativeBase):
     pass
 
 
-engine: AsyncEngine = create_async_engine(
-    settings.DATABASE_URL,
-    echo=settings.DEBUG,
-    pool_pre_ping=True,
-    pool_size=20,
-    max_overflow=40,
-    pool_timeout=30,
-    pool_recycle=1800,
-)
+def _build_engine() -> AsyncEngine:
+    url = settings.DATABASE_URL
+    # Strip query params that asyncpg doesn't understand (sslmode, channel_binding)
+    # and re-add SSL via connect_args instead.
+    needs_ssl = "neon.tech" in url or "sslmode" in url
+    clean_url = url.split("?")[0]
+
+    connect_args = {}
+    if needs_ssl:
+        import ssl as _ssl
+        ctx = _ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = _ssl.CERT_NONE
+        connect_args["ssl"] = ctx
+
+    return create_async_engine(
+        clean_url,
+        echo=settings.DEBUG,
+        pool_pre_ping=True,
+        pool_size=5,
+        max_overflow=10,
+        pool_timeout=30,
+        pool_recycle=1800,
+        connect_args=connect_args,
+    )
+
+
+engine: AsyncEngine = _build_engine()
 
 AsyncSessionFactory = async_sessionmaker(
     bind=engine,

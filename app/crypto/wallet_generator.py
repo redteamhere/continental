@@ -1,20 +1,17 @@
 """
 HD wallet generation for TRON, Ethereum, Bitcoin, Litecoin.
-Uses BIP-39 (mnemonic) + BIP-44 (derivation paths).
-Private keys are NEVER stored in plaintext — always encrypted on write.
+
+In LOCAL_DEV mode: generates deterministic fake addresses so the full bot
+flow (deal creation, payment UI, etc.) can be tested without installing
+C-extension packages (bip-utils, web3) that require a compiler.
+
+In production: set LOCAL_DEV=false and ensure bip-utils==2.9.3 is installed.
 """
 from __future__ import annotations
 
+import hashlib
+import os
 from dataclasses import dataclass
-
-from bip_utils import (
-    Bip39MnemonicGenerator,
-    Bip39SeedGenerator,
-    Bip44,
-    Bip44Coins,
-    Bip44Changes,
-    Bip39WordsNum,
-)
 
 from app.models.wallet import Chain
 
@@ -23,61 +20,71 @@ from app.models.wallet import Chain
 class GeneratedWallet:
     chain: Chain
     address: str
-    private_key: str       # hex string — encrypt before persisting
+    private_key: str       # hex — encrypt before persisting
     derivation_path: str
 
 
-# BIP-44 coin mapping
-_BIP44_COIN: dict[Chain, Bip44Coins] = {
-    Chain.ETHEREUM: Bip44Coins.ETHEREUM,
-    Chain.BITCOIN: Bip44Coins.BITCOIN,
-    Chain.LITECOIN: Bip44Coins.LITECOIN,
-    Chain.TRON: Bip44Coins.TRON,
-}
-
-
 class WalletGenerator:
-    """
-    Generates deterministic HD wallets per deal.
-    Each deal gets a unique index so wallets are reproducible from the master seed.
-    The master mnemonic must be stored securely (encrypted, offline backup).
-    """
-
     def __init__(self, master_mnemonic: str) -> None:
         self._mnemonic = master_mnemonic
-        self._seed = Bip39SeedGenerator(master_mnemonic).Generate()
 
     @staticmethod
     def generate_mnemonic() -> str:
-        """Generate a new 24-word BIP-39 mnemonic (256-bit entropy)."""
-        return Bip39MnemonicGenerator().FromWordsNumber(Bip39WordsNum.WORDS_NUM_24)
+        """Generate a placeholder mnemonic for local dev."""
+        if os.environ.get("LOCAL_DEV", "true").lower() == "true":
+            return "test " * 23 + "test"
+        # Production: use bip_utils
+        from bip_utils import Bip39MnemonicGenerator, Bip39WordsNum
+        return str(Bip39MnemonicGenerator().FromWordsNumber(Bip39WordsNum.WORDS_NUM_24))
 
     def derive_wallet(self, chain: Chain, index: int) -> GeneratedWallet:
-        """Derive wallet at m/44'/<coin>'/0'/0/<index>."""
+        if os.environ.get("LOCAL_DEV", "true").lower() == "true":
+            return self._derive_mock(chain, index)
+        return self._derive_real(chain, index)
+
+    def _derive_mock(self, chain: Chain, index: int) -> GeneratedWallet:
+        """Deterministic mock wallet — same input always gives same output."""
+        seed = f"{self._mnemonic}:{chain.value}:{index}".encode()
+        h = hashlib.sha256(seed).hexdigest()
+        private_key = h  # 64-char hex — not a real key
+
+        if chain == Chain.TRON:
+            # TRON addresses start with T and are 34 chars
+            address = "T" + h[:33].upper()
+        elif chain == Chain.ETHEREUM:
+            address = "0x" + h[:40]
+        elif chain == Chain.BITCOIN:
+            address = "bc1q" + h[:36]
+        elif chain == Chain.LITECOIN:
+            address = "ltc1q" + h[:35]
+        else:
+            address = h[:42]
+
+        path = f"m/44'/0'/0'/0/{index}"
+        return GeneratedWallet(chain=chain, address=address, private_key=private_key, derivation_path=path)
+
+    def _derive_real(self, chain: Chain, index: int) -> GeneratedWallet:
+        """Real BIP-44 derivation — requires bip-utils to be installed."""
+        from bip_utils import (
+            Bip39SeedGenerator, Bip44, Bip44Coins, Bip44Changes, Bip39WordsNum
+        )
+        _BIP44_COIN = {
+            Chain.ETHEREUM: Bip44Coins.ETHEREUM,
+            Chain.BITCOIN: Bip44Coins.BITCOIN,
+            Chain.LITECOIN: Bip44Coins.LITECOIN,
+            Chain.TRON: Bip44Coins.TRON,
+        }
+        seed = Bip39SeedGenerator(self._mnemonic).Generate()
         coin = _BIP44_COIN[chain]
-        bip44_mst = Bip44.FromSeed(self._seed, coin)
-        bip44_acc = bip44_mst.Purpose().Coin().Account(0).Change(Bip44Changes.CHAIN_EXT)
-        bip44_addr = bip44_acc.AddressIndex(index)
-
-        private_key = bip44_addr.PrivateKey().Raw().ToHex()
-        address = bip44_addr.PublicKey().ToAddress()
-        derivation_path = f"m/44'/{_coin_type(coin)}'/0'/0/{index}"
-
-        # TRON addresses use Base58 starting with 'T'
-        # ETH uses '0x' prefix — bip_utils handles both
+        bip44_addr = (
+            Bip44.FromSeed(seed, coin)
+            .Purpose().Coin().Account(0)
+            .Change(Bip44Changes.CHAIN_EXT)
+            .AddressIndex(index)
+        )
         return GeneratedWallet(
             chain=chain,
-            address=address,
-            private_key=private_key,
-            derivation_path=derivation_path,
+            address=bip44_addr.PublicKey().ToAddress(),
+            private_key=bip44_addr.PrivateKey().Raw().ToHex(),
+            derivation_path=f"m/44'/0'/0'/0/{index}",
         )
-
-
-def _coin_type(coin: Bip44Coins) -> int:
-    mapping = {
-        Bip44Coins.ETHEREUM: 60,
-        Bip44Coins.BITCOIN: 0,
-        Bip44Coins.LITECOIN: 2,
-        Bip44Coins.TRON: 195,
-    }
-    return mapping.get(coin, 0)

@@ -1,4 +1,6 @@
 from app.crypto.wallet_generator import WalletGenerator
-from app.crypto.monitor import BlockchainMonitor
 
-__all__ = ["WalletGenerator", "BlockchainMonitor"]
+# BlockchainMonitor imported lazily to avoid requiring web3/tronpy at startup
+# when LOCAL_DEV=true.  Import it explicitly where needed.
+
+__all__ = ["WalletGenerator"]

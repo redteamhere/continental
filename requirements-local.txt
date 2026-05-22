@@ -1,0 +1,28 @@
+# Local development dependencies — no C extensions required
+# Install with: pip install -r requirements-local.txt
+
+aiogram>=3.7
+fastapi>=0.111
+uvicorn[standard]
+sqlalchemy[asyncio]>=2.0
+alembic>=1.13
+asyncpg>=0.29
+redis[hiredis]
+cryptography
+passlib[bcrypt]
+pydantic>=2.7
+pydantic-settings>=2.2
+python-dotenv
+aiohttp
+httpx
+loguru
+tenacity
+apscheduler==3.10.4
+qrcode[pil]
+orjson
+python-multipart
+
+# NOTE: bip-utils, web3, tronpy are NOT included here.
+# They require C extensions (coincurve, secp256k1) that need a compiler.
+# In LOCAL_DEV=true mode the bot uses mock wallets and skips blockchain calls.
+# For production, install the full requirements.txt on Linux (Docker).

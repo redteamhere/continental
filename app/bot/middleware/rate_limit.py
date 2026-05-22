@@ -1,11 +1,10 @@
-"""Per-user rate limiting via Redis sliding window."""
+"""Per-user rate limiting via Redis sliding window. Gracefully skips if Redis unavailable."""
 from __future__ import annotations
 
 from typing import Any, Awaitable, Callable
 
 from aiogram import BaseMiddleware
 from aiogram.types import Message, CallbackQuery, TelegramObject
-import redis.asyncio as aioredis
 
 from app.config import settings
 
@@ -15,7 +14,24 @@ _MAX_REQUESTS = settings.MAX_REQUESTS_PER_MINUTE
 
 class RateLimitMiddleware(BaseMiddleware):
     def __init__(self, redis_url: str) -> None:
-        self._redis = aioredis.from_url(redis_url, decode_responses=True)
+        self._redis_url = redis_url
+        self._redis = None          # lazy-init
+        self._redis_ok = True       # set False after first failure
+
+    async def _get_redis(self):
+        if not self._redis_ok:
+            return None
+        if self._redis is None:
+            try:
+                import redis.asyncio as aioredis
+                r = aioredis.from_url(self._redis_url, decode_responses=True,
+                                      socket_connect_timeout=1)
+                await r.ping()
+                self._redis = r
+            except Exception:
+                self._redis_ok = False
+                return None
+        return self._redis
 
     async def __call__(
         self,
@@ -27,18 +43,21 @@ class RateLimitMiddleware(BaseMiddleware):
         if not tg_user:
             return await handler(event, data)
 
-        key = f"rl:{tg_user.id}"
-        pipe = self._redis.pipeline()
-        pipe.incr(key)
-        pipe.expire(key, _WINDOW_SECONDS)
-        results = await pipe.execute()
-        count = results[0]
-
-        if count > _MAX_REQUESTS:
-            if isinstance(event, Message):
-                await event.answer("⚠️ Too many requests. Please slow down.")
-            elif isinstance(event, CallbackQuery):
-                await event.answer("⚠️ Too many requests.", show_alert=True)
-            return
+        redis = await self._get_redis()
+        if redis:
+            try:
+                key = f"rl:{tg_user.id}"
+                pipe = redis.pipeline()
+                pipe.incr(key)
+                pipe.expire(key, _WINDOW_SECONDS)
+                count = (await pipe.execute())[0]
+                if count > _MAX_REQUESTS:
+                    if isinstance(event, Message):
+                        await event.answer("⚠️ Too many requests. Please slow down.")
+                    elif isinstance(event, CallbackQuery):
+                        await event.answer("⚠️ Too many requests.", show_alert=True)
+                    return
+            except Exception:
+                pass  # Redis blip — allow through rather than block the user
 
         return await handler(event, data)

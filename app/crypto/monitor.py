@@ -13,28 +13,39 @@ from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import os
+
 from app.config import settings
-from app.crypto.btc_client import BlockClient
-from app.crypto.eth_client import EthClient
-from app.crypto.tron_client import TronClient
 from app.database import AsyncSessionFactory
 from app.models.deal import Deal, DealStatus, Currency
 from app.models.transaction import Transaction, TxStatus
 from app.models.wallet import Chain, Wallet
 from app.security.encryption import decrypt_private_key
 
+_LOCAL_DEV = os.environ.get("LOCAL_DEV", "true").lower() == "true"
+
+if not _LOCAL_DEV:
+    from app.crypto.btc_client import BlockClient
+    from app.crypto.eth_client import EthClient
+    from app.crypto.tron_client import TronClient
+
 
 class BlockchainMonitor:
     """Poll active wallets and detect incoming payments."""
 
     def __init__(self) -> None:
-        self._tron = TronClient()
-        self._eth = EthClient()
-        self._btc = BlockClient("BTC")
-        self._ltc = BlockClient("LTC")
+        self._local_dev = _LOCAL_DEV
+        if not self._local_dev:
+            self._tron = TronClient()
+            self._eth = EthClient()
+            self._btc = BlockClient("BTC")
+            self._ltc = BlockClient("LTC")
 
     async def run_cycle(self) -> None:
         """One full monitoring pass across all active wallets."""
+        if self._local_dev:
+            logger.debug("[Monitor] LOCAL_DEV mode — blockchain monitoring skipped")
+            return
         async with AsyncSessionFactory() as session:
             wallets = await self._get_active_wallets(session)
             logger.info(f"[Monitor] Checking {len(wallets)} active wallets")

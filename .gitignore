@@ -1,0 +1,51 @@
+# Environment & secrets — NEVER commit these
+.env
+*.env
+.env.local
+.env.production
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+.venv/
+dist/
+build/
+*.egg-info/
+.eggs/
+
+# Logs
+logs/
+*.log
+
+# Database
+*.sqlite3
+*.db
+
+# Alembic (keep versions, ignore generated)
+migrations/versions/*.pyc
+
+# SSL certificates
+nginx/ssl/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Backups
+backups/
+
+# Test coverage
+.coverage
+htmlcov/
+.pytest_cache/

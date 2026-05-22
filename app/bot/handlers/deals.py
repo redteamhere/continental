@@ -5,6 +5,7 @@ from decimal import Decimal, InvalidOperation
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 
 from app.bot.keyboards.deal_kb import (
@@ -16,6 +17,8 @@ from app.bot.keyboards.deal_kb import (
 )
 from app.models.audit import Review
 from app.bot.keyboards.main_menu import back_kb, deals_list_kb, main_menu_kb
+from app.bot.keyboards.pin_kb import pin_pad_kb, pin_dots
+from app.bot.handlers.pin_input import build_pin_message
 from app.bot.states.deal_creation import DealCreationStates
 from app.config import settings
 from app.security.pin_manager import PinManager
@@ -26,6 +29,11 @@ from app.services.deal_service import DealService
 from app.services.escrow_service import EscrowService
 from app.services.notification_service import NotificationService
 from app.services.user_service import UserService
+
+
+class ReleasePinState(StatesGroup):
+    verify = State()
+
 
 router = Router()
 
@@ -164,59 +172,71 @@ async def deal_enter_terms(message: Message, state: FSMContext) -> None:
     )
     if terms:
         summary += f"Terms: {terms}\n"
-    summary += "\nConfirm and enter your PIN to create the deal:"
 
+    await state.update_data(pin_buffer="")
     await state.set_state(DealCreationStates.confirm_pin)
+    # Send summary first, then PIN pad
     await message.answer(summary, parse_mode="HTML")
+    pin_text, pin_kb = build_pin_message(DealCreationStates.confirm_pin.state, 0)
+    await message.answer(pin_text, reply_markup=pin_kb, parse_mode="HTML")
 
 
-@router.message(DealCreationStates.confirm_pin)
-async def deal_confirm_pin(message: Message, state: FSMContext, db_user) -> None:
-    pin = message.text.strip() if message.text else ""
-    try:
-        await message.delete()
-    except Exception:
-        pass
+@router.callback_query(F.data == "pin:submit", DealCreationStates.confirm_pin)
+async def deal_pin_submit(callback: CallbackQuery, state: FSMContext) -> None:
+    data = await state.get_data()
+    pin = data.get("pin_buffer", "")
 
     async with AsyncSessionFactory() as session:
         svc = UserService(session)
         audit = AuditService(session)
-        user = await svc.get_by_telegram_id(message.from_user.id)
+        user = await svc.get_by_telegram_id(callback.from_user.id)
 
         if PinManager.is_locked(user.pin_locked_until):
             secs = PinManager.seconds_until_unlock(user.pin_locked_until)
-            await message.answer(f"🔒 PIN locked. Try again in {secs // 60}m {secs % 60}s.")
+            await callback.message.edit_text(f"🔒 PIN locked. Try again in {secs // 60}m {secs % 60}s.")
+            await state.clear()
+            await callback.answer()
             return
 
         ok = await svc.verify_pin(user, pin)
         if not ok:
             await audit.pin_failed(user.id)
             await session.commit()
-            await message.answer("❌ Wrong PIN. Deal creation cancelled.")
-            await state.clear()
+            await state.update_data(pin_buffer="")
+            pin_text, pin_kb = build_pin_message(DealCreationStates.confirm_pin.state, 0)
+            await callback.message.edit_text(
+                "❌ Wrong PIN. Try again:\n\n" + pin_text.split("\n\n", 1)[-1],
+                reply_markup=pin_kb,
+                parse_mode="HTML",
+            )
+            await callback.answer()
             return
         await session.commit()
 
-    await _finalize_deal_creation(message, state)
+    await callback.answer()
+    await _finalize_deal_creation(callback, state)
 
 
-async def _finalize_deal_creation(message: Message, state: FSMContext) -> None:
+async def _finalize_deal_creation(event: Message | CallbackQuery, state: FSMContext) -> None:
+    """Works with both Message (text flow) and CallbackQuery (PIN pad flow)."""
     data = await state.get_data()
+    tg_id = event.from_user.id
+    bot = event.bot
+    send = event.message.answer if isinstance(event, CallbackQuery) else event.answer
 
     async with AsyncSessionFactory() as session:
         user_svc = UserService(session)
         deal_svc = DealService(session)
         escrow_svc = EscrowService(session)
-        notif_svc = NotificationService(session, message.bot)
+        notif_svc = NotificationService(session, bot)
         audit = AuditService(session)
 
-        buyer = await user_svc.get_by_telegram_id(message.from_user.id)
+        buyer = await user_svc.get_by_telegram_id(tg_id)
         seller = await user_svc.get_by_id(data["seller_id"])
 
-        # Rate limit: max deals per day
         today_count = await deal_svc.count_today_deals(buyer)
         if today_count >= settings.MAX_DEALS_PER_DAY:
-            await message.answer("❌ Daily deal limit reached. Try again tomorrow.")
+            await send("❌ Daily deal limit reached. Try again tomorrow.")
             await state.clear()
             return
 
@@ -230,7 +250,6 @@ async def _finalize_deal_creation(message: Message, state: FSMContext) -> None:
             terms=data.get("terms"),
         )
 
-        # Generate escrow wallet immediately
         wallet = await escrow_svc.create_escrow_wallet(deal)
         await deal_svc.attach_wallet(deal, wallet)
 
@@ -238,14 +257,14 @@ async def _finalize_deal_creation(message: Message, state: FSMContext) -> None:
         await notif_svc.deal_created(deal, buyer, seller)
         await session.commit()
 
-        await state.clear()
-        await message.answer(
-            f"✅ <b>Deal Created!</b>\n\n"
-            f"Deal ID: <code>{deal.deal_number}</code>\n"
-            f"Waiting for @{seller.username} to accept.",
-            reply_markup=main_menu_kb(),
-            parse_mode="HTML",
-        )
+    await state.clear()
+    await send(
+        f"✅ <b>Deal Created!</b>\n\n"
+        f"Deal ID: <code>{deal.deal_number}</code>\n"
+        f"Waiting for @{seller.username} to accept.",
+        reply_markup=main_menu_kb(),
+        parse_mode="HTML",
+    )
 
 
 @router.callback_query(F.data == "deal:cancel_creation")
@@ -398,63 +417,59 @@ async def decline_deal(callback: CallbackQuery, db_user) -> None:
 @router.callback_query(F.data.startswith("deal:release:"))
 async def release_funds(callback: CallbackQuery, state: FSMContext, db_user) -> None:
     deal_id = int(callback.data.split(":")[2])
-    await state.update_data(pending_release_deal_id=deal_id)
-
-    await callback.message.answer(
-        "🔐 Enter your PIN to release funds to the seller:"
-    )
+    await state.update_data(pending_release_deal_id=deal_id, pin_buffer="")
     await state.set_state(ReleasePinState.verify)
+
+    pin_text, pin_kb = build_pin_message(ReleasePinState.verify.state, 0)
+    await callback.message.answer(pin_text, reply_markup=pin_kb, parse_mode="HTML")
     await callback.answer()
 
 
-from aiogram.fsm.state import State, StatesGroup
-
-
-class ReleasePinState(StatesGroup):
-    verify = State()
-
-
-@router.message(ReleasePinState.verify)
-async def release_pin_verify(message: Message, state: FSMContext, db_user) -> None:
-    pin = message.text.strip() if message.text else ""
-    try:
-        await message.delete()
-    except Exception:
-        pass
-
+@router.callback_query(F.data == "pin:submit", ReleasePinState.verify)
+async def release_pin_submit(callback: CallbackQuery, state: FSMContext) -> None:
     data = await state.get_data()
+    pin = data.get("pin_buffer", "")
     deal_id = data.get("pending_release_deal_id")
 
     async with AsyncSessionFactory() as session:
         svc = UserService(session)
-        user = await svc.get_by_telegram_id(message.from_user.id)
+        user = await svc.get_by_telegram_id(callback.from_user.id)
 
         if PinManager.is_locked(user.pin_locked_until):
             secs = PinManager.seconds_until_unlock(user.pin_locked_until)
-            await message.answer(f"🔒 PIN locked. Try in {secs // 60}m {secs % 60}s.")
+            await callback.message.edit_text(f"🔒 PIN locked. Try again in {secs // 60}m {secs % 60}s.")
+            await state.clear()
+            await callback.answer()
             return
 
         ok = await svc.verify_pin(user, pin)
         if not ok:
             await AuditService(session).pin_failed(user.id)
             await session.commit()
-            await message.answer("❌ Wrong PIN. Release cancelled.")
-            await state.clear()
+            await state.update_data(pin_buffer="")
+            pin_text, pin_kb = build_pin_message(ReleasePinState.verify.state, 0)
+            await callback.message.edit_text(
+                "❌ Wrong PIN. Try again:\n\n" + pin_text.split("\n\n", 1)[-1],
+                reply_markup=pin_kb,
+                parse_mode="HTML",
+            )
+            await callback.answer()
             return
 
         deal_svc = DealService(session)
         escrow_svc = EscrowService(session)
-        notif_svc = NotificationService(session, message.bot)
+        notif_svc = NotificationService(session, callback.bot)
         audit = AuditService(session)
 
         deal = await deal_svc.get_by_id(deal_id)
         if not deal or deal.buyer_id != user.id:
-            await message.answer("Deal not found.")
+            await callback.message.edit_text("Deal not found.")
             await state.clear()
+            await callback.answer()
             return
 
         await deal_svc.complete(deal, user)
-        tx_hash = await escrow_svc.release_funds_to_seller(deal)
+        await escrow_svc.release_funds_to_seller(deal)
 
         seller = await UserService(session).get_by_id(deal.seller_id)
         await notif_svc.deal_completed(deal, user, seller)
@@ -462,12 +477,13 @@ async def release_pin_verify(message: Message, state: FSMContext, db_user) -> No
         await session.commit()
 
     await state.clear()
-    await message.answer(
+    await callback.message.edit_text(
         f"✅ <b>Funds Released!</b>\n\nDeal <code>{deal.deal_number}</code> is complete.\n"
         f"Please leave a review for the seller.",
         reply_markup=review_stars_kb(deal.id),
         parse_mode="HTML",
     )
+    await callback.answer()
 
 
 # ── Seller marks as delivered ────────────────────────────────

@@ -12,7 +12,7 @@ from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
-from app.bot.keyboards.pin_kb import MAX_PIN, pin_dots, pin_pad_kb, pin_remove_kb
+from app.bot.keyboards.pin_kb import MAX_PIN, pin_dots, pin_pad_kb, pin_remove_kb, pin_webapp_kb
 from app.bot.keyboards.main_menu import main_menu_kb
 from app.bot.states.deal_creation import DealCreationStates
 from app.bot.states.pin import PinStates
@@ -177,6 +177,9 @@ async def web_app_pin_received(message: Message, state: FSMContext, db_user) -> 
     elif mode == "verify" and state_str == "ReleasePinState:verify":
         await _webapp_release_pin(message, state, pin)
 
+    elif mode == "verify" and state_str == PinStates.change_old.state:
+        await _webapp_change_pin_verify(message, state, pin)
+
     else:
         await message.answer("❌ Unexpected PIN entry. Please start over.")
         await state.clear()
@@ -332,3 +335,43 @@ async def _webapp_pin_reset_set(message: Message, state: FSMContext, pin: str) -
     )
     from app.bot.keyboards.main_menu import main_menu_kb as _menu_kb
     await message.answer("🏠 <b>Main Menu</b>", reply_markup=_menu_kb(), parse_mode="HTML")
+
+
+async def _webapp_change_pin_verify(message: Message, state: FSMContext, pin: str) -> None:
+    """Webapp sent the current PIN during the Change PIN flow — verify it then ask for new PIN."""
+    from app.database import AsyncSessionFactory
+    from app.services.user_service import UserService
+    from app.services.audit_service import AuditService
+    from app.config import settings as _cfg
+
+    async with AsyncSessionFactory() as session:
+        svc = UserService(session)
+        audit = AuditService(session)
+        user = await svc.get_by_telegram_id(message.from_user.id)
+        ok = await svc.verify_pin(user, pin)
+        if not ok:
+            await audit.pin_failed(user.id)
+            await session.commit()
+            await message.answer(
+                "❌ Wrong PIN. Please try again.",
+                reply_markup=pin_webapp_kb(_cfg.WEB_APP_URL, "verify") if _cfg.WEB_APP_URL else None,
+                parse_mode="HTML",
+            )
+            return
+        await session.commit()
+
+    await state.set_state(PinResetStates.waiting_for_new_pin)
+    await message.answer(
+        "✅ Verified. Now set your new PIN.",
+        reply_markup=pin_remove_kb(),
+        parse_mode="HTML",
+    )
+    if _cfg.WEB_APP_URL:
+        await message.answer(
+            "🔑 <b>New PIN</b>\n\nTap the button to set your new PIN.",
+            reply_markup=pin_webapp_kb(_cfg.WEB_APP_URL, "set"),
+            parse_mode="HTML",
+        )
+    else:
+        text, kb = build_pin_message(PinResetStates.waiting_for_new_pin.state, 0)
+        await message.answer(text, reply_markup=kb, parse_mode="HTML")

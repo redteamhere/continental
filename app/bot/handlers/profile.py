@@ -7,8 +7,10 @@ from aiogram.types import CallbackQuery, Message
 
 from app.bot.handlers.pin_input import build_pin_message
 from app.bot.keyboards.main_menu import back_kb, main_menu_kb
+from app.bot.keyboards.pin_kb import pin_webapp_kb
 from app.bot.states.pin import PinStates
 from app.bot.states.pin_reset import PinResetStates
+from app.config import settings as _settings
 from app.database import AsyncSessionFactory
 from app.services.audit_service import AuditService
 from app.services.user_service import UserService
@@ -119,8 +121,15 @@ async def start_set_pin(callback: CallbackQuery, state: FSMContext, db_user) -> 
         return
     await state.update_data(pin_buffer="")
     await state.set_state(PinResetStates.waiting_for_new_pin)
-    text, kb = build_pin_message(PinResetStates.waiting_for_new_pin.state, 0)
-    await callback.message.answer(text, reply_markup=kb, parse_mode="HTML")
+    if _settings.WEB_APP_URL:
+        await callback.message.answer(
+            "🔑 <b>Set your PIN</b>\n\nTap the button below to set a 4–8 digit PIN.",
+            reply_markup=pin_webapp_kb(_settings.WEB_APP_URL, "set"),
+            parse_mode="HTML",
+        )
+    else:
+        text, kb = build_pin_message(PinResetStates.waiting_for_new_pin.state, 0)
+        await callback.message.answer(text, reply_markup=kb, parse_mode="HTML")
     await callback.answer()
 
 
@@ -128,8 +137,15 @@ async def start_set_pin(callback: CallbackQuery, state: FSMContext, db_user) -> 
 async def start_change_pin(callback: CallbackQuery, state: FSMContext) -> None:
     await state.update_data(pin_buffer="")
     await state.set_state(PinStates.change_old)
-    text, kb = build_pin_message(PinStates.change_old.state, 0)
-    await callback.message.answer(text, reply_markup=kb, parse_mode="HTML")
+    if _settings.WEB_APP_URL:
+        await callback.message.answer(
+            "🔐 <b>Change PIN</b>\n\nFirst, enter your <b>current</b> PIN to verify it's you.",
+            reply_markup=pin_webapp_kb(_settings.WEB_APP_URL, "verify"),
+            parse_mode="HTML",
+        )
+    else:
+        text, kb = build_pin_message(PinStates.change_old.state, 0)
+        await callback.message.answer(text, reply_markup=kb, parse_mode="HTML")
     await callback.answer()
 
 
@@ -163,6 +179,17 @@ async def change_pin_verify_old(callback: CallbackQuery, state: FSMContext) -> N
 
     await state.update_data(pin_buffer="")
     await state.set_state(PinResetStates.waiting_for_new_pin)
-    text, kb = build_pin_message(PinResetStates.waiting_for_new_pin.state, 0)
-    await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+    if _settings.WEB_APP_URL:
+        await callback.message.edit_text(
+            "✅ Verified. Now set your new PIN.",
+            parse_mode="HTML",
+        )
+        await callback.message.answer(
+            "🔑 <b>New PIN</b>\n\nTap the button to set your new PIN.",
+            reply_markup=pin_webapp_kb(_settings.WEB_APP_URL, "set"),
+            parse_mode="HTML",
+        )
+    else:
+        text, kb = build_pin_message(PinResetStates.waiting_for_new_pin.state, 0)
+        await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
     await callback.answer()

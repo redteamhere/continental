@@ -1,5 +1,6 @@
 """
-Local development runner — polling mode (no webhook, no domain needed).
+Polling-mode runner — works both locally and on cloud hosts (Railway, Render, Fly.io).
+No webhook, no domain, no Docker required.
 Usage: python run_local.py
 """
 import asyncio
@@ -39,8 +40,12 @@ async def _migrate_columns() -> None:
 
 async def main():
     logger.remove()
-    logger.add(sys.stdout, level="DEBUG",
-               format="<green>{time:HH:mm:ss}</green> | <level>{level:<8}</level> | {message}")
+    logger.add(
+        sys.stdout,
+        level=settings.LOG_LEVEL,
+        format="<green>{time:HH:mm:ss}</green> | <level>{level:<8}</level> | {message}",
+        colorize=False,  # plain text on cloud log streams
+    )
 
     logger.info("Creating database tables...")
     await create_tables()
@@ -93,8 +98,7 @@ async def main():
             logger.warning(f"Could not set admin commands for {admin_id}: {e}")
 
     me = await bot.get_me()
-    logger.info(f"Bot started: @{me.username} — polling mode")
-    logger.info("Press Ctrl+C to stop.")
+    logger.info(f"Bot started: @{me.username} | env={settings.ENVIRONMENT} | LOCAL_DEV={settings.LOCAL_DEV}")
 
     try:
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())

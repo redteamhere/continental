@@ -154,6 +154,19 @@ async def menu_main(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
 
 
+@router.message(Command("myid"))
+async def cmd_myid(message: Message, db_user) -> None:
+    is_admin = message.from_user.id in _settings.ADMIN_IDS
+    role = db_user.role.value if db_user else "not registered"
+    await message.answer(
+        f"🪪 Your Telegram ID: <code>{message.from_user.id}</code>\n"
+        f"DB role: <b>{role}</b>\n"
+        f"In ADMIN_IDS: <b>{'yes ✅' if is_admin else 'no ❌'}</b>\n"
+        f"ADMIN_IDS configured: <code>{_settings.ADMIN_IDS}</code>",
+        parse_mode="HTML",
+    )
+
+
 @router.message(Command("help"))
 async def cmd_help(message: Message) -> None:
     await message.answer(_HELP_TEXT, parse_mode="HTML")

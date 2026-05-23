@@ -1,10 +1,13 @@
 FROM python:3.11-slim
 
-# System dependencies
+# System dependencies — build-essential + libc6-dev required for
+# native extensions (ed25519-blake2b from bip-utils, bcrypt, cryptography)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
+    build-essential \
     libc6-dev \
     libpq-dev \
+    libssl-dev \
+    libffi-dev \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
@@ -26,6 +29,4 @@ RUN mkdir -p /app/logs && chown botuser:botuser /app/logs
 
 USER botuser
 
-EXPOSE 8000
-
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+CMD ["python", "run_local.py"]

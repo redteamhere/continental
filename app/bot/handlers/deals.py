@@ -225,43 +225,66 @@ async def deal_pin_submit(callback: CallbackQuery, state: FSMContext) -> None:
 
 async def _finalize_deal_creation(event: Message | CallbackQuery, state: FSMContext) -> None:
     """Works with both Message (text flow) and CallbackQuery (PIN pad flow)."""
+    from loguru import logger
     data = await state.get_data()
     tg_id = event.from_user.id
     bot = event.bot
     send = event.message.answer if isinstance(event, CallbackQuery) else event.answer
 
-    async with AsyncSessionFactory() as session:
-        user_svc = UserService(session)
-        deal_svc = DealService(session)
-        escrow_svc = EscrowService(session)
-        notif_svc = NotificationService(session, bot)
-        audit = AuditService(session)
+    try:
+        async with AsyncSessionFactory() as session:
+            user_svc = UserService(session)
+            deal_svc = DealService(session)
+            escrow_svc = EscrowService(session)
+            notif_svc = NotificationService(session, bot)
+            audit = AuditService(session)
 
-        buyer = await user_svc.get_by_telegram_id(tg_id)
-        seller = await user_svc.get_by_id(data["seller_id"])
+            buyer = await user_svc.get_by_telegram_id(tg_id)
+            seller = await user_svc.get_by_id(data["seller_id"])
 
-        today_count = await deal_svc.count_today_deals(buyer)
-        if today_count >= settings.MAX_DEALS_PER_DAY:
-            await send("❌ Daily deal limit reached. Try again tomorrow.")
-            await state.clear()
-            return
+            today_count = await deal_svc.count_today_deals(buyer)
+            if today_count >= settings.MAX_DEALS_PER_DAY:
+                await send("❌ Daily deal limit reached. Try again tomorrow.")
+                await state.clear()
+                return
 
-        deal = await deal_svc.create(
-            buyer=buyer,
-            seller=seller,
-            description=data["description"],
-            amount=Decimal(data["amount"]),
-            currency=Currency(data["currency"]),
-            deadline_days=data["deadline_days"],
-            terms=data.get("terms"),
+            deal = await deal_svc.create(
+                buyer=buyer,
+                seller=seller,
+                description=data["description"],
+                amount=Decimal(data["amount"]),
+                currency=Currency(data["currency"]),
+                deadline_days=data["deadline_days"],
+                terms=data.get("terms"),
+            )
+
+            wallet = await escrow_svc.create_escrow_wallet(deal)
+            await deal_svc.attach_wallet(deal, wallet)
+
+            await audit.deal_created(buyer.id, deal.id, {"deal_number": deal.deal_number})
+            await notif_svc.deal_created(deal, buyer, seller)
+            await session.commit()
+
+    except RuntimeError as e:
+        logger.error(f"Deal creation failed (config error): {e}")
+        await state.clear()
+        await send(
+            f"❌ <b>Deal creation failed</b>\n\n"
+            f"Server configuration error: <code>{e}</code>\n\n"
+            f"Please contact the administrator.",
+            reply_markup=main_menu_kb(),
+            parse_mode="HTML",
         )
-
-        wallet = await escrow_svc.create_escrow_wallet(deal)
-        await deal_svc.attach_wallet(deal, wallet)
-
-        await audit.deal_created(buyer.id, deal.id, {"deal_number": deal.deal_number})
-        await notif_svc.deal_created(deal, buyer, seller)
-        await session.commit()
+        return
+    except Exception as e:
+        logger.exception(f"Deal creation failed unexpectedly: {e}")
+        await state.clear()
+        await send(
+            "❌ <b>Deal creation failed.</b> Please try again or contact support.",
+            reply_markup=main_menu_kb(),
+            parse_mode="HTML",
+        )
+        return
 
     await state.clear()
     await send(

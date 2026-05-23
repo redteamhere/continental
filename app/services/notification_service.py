@@ -32,16 +32,27 @@ class NotificationService:
     # ── Deal lifecycle ───────────────────────────────────────
 
     async def deal_created(self, deal: Deal, buyer: User, seller: User) -> None:
-        await self._send(
-            seller,
+        from app.bot.keyboards.deal_kb import seller_deal_kb
+        text = (
             f"📋 <b>New Deal Request</b>\n\n"
             f"Deal: <code>{deal.deal_number}</code>\n"
             f"From: {buyer.display_name}\n"
             f"Amount: <b>{deal.amount} {deal.currency.symbol}</b>\n"
             f"Description: {deal.description}\n\n"
-            f"Use /deal_{deal.deal_number} to accept or decline.",
-            type="deal_created",
+            f"Accept or decline below."
         )
+        n = Notification(user_id=seller.id, type="deal_created", message=text)
+        self._s.add(n)
+        if self._bot:
+            try:
+                await self._bot.send_message(
+                    seller.telegram_id,
+                    text,
+                    parse_mode="HTML",
+                    reply_markup=seller_deal_kb(deal),
+                )
+            except TelegramAPIError as e:
+                logger.warning(f"[Notify] Failed to send to {seller.telegram_id}: {e}")
 
     async def deal_accepted(self, deal: Deal, buyer: User, seller: User) -> None:
         await self._send(

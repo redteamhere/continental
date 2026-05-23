@@ -4,7 +4,6 @@ Private keys are decrypted only at the moment of signing and immediately discard
 """
 from __future__ import annotations
 
-import os
 from decimal import Decimal
 from typing import Optional
 
@@ -33,12 +32,9 @@ def _chain_for_currency(currency: Currency) -> Chain:
 
 def _cold_wallet_address(currency: Currency) -> str:
     """Return the admin cold wallet address for this currency, or empty string."""
-    return {
-        "USDT_TRC20": settings.COLD_WALLET_USDT_TRC20,
-        "BTC":        settings.COLD_WALLET_BTC,
-        "ETH":        settings.COLD_WALLET_ETH,
-        "LTC":        settings.COLD_WALLET_LTC,
-    }.get(currency.value, "")
+    if currency.value == "USDT_TRC20":
+        return settings.COLD_WALLET_USDT_TRC20
+    return ""
 
 
 class EscrowService:

@@ -56,27 +56,13 @@ class Settings(BaseSettings):
     MIN_DEAL_AMOUNT_USD: float = 10.0
     MAX_DEAL_AMOUNT_USD: float = 100_000.0
 
-    # ── Admin cold wallets (manual escrow mode) ─────────────
-    # Set these in Railway. When set, buyers send to these fixed addresses.
-    # Admin confirms receipt via /confirm_payment DEAL-XXXXX.
+    # ── Admin cold wallet (USDT TRC20) ──────────────────────
+    # Buyer sends to this address; admin confirms via /confirm_payment DEAL-XXXXX
     COLD_WALLET_USDT_TRC20: str = ""
-    COLD_WALLET_BTC: str = ""
-    COLD_WALLET_ETH: str = ""
-    COLD_WALLET_LTC: str = ""
 
-    # ── Blockchain ───────────────────────────────────────────
+    # ── Tron / USDT TRC20 ────────────────────────────────────
     TRON_API_KEY: str = ""
-    TRON_NETWORK: str = "mainnet"
-    ETH_RPC_URL: str = ""
-    BTC_NETWORK: str = "mainnet"
-    LTC_NETWORK: str = "mainnet"
-    BLOCKCYPHER_TOKEN: str = ""
-
-    # ── Confirmations ────────────────────────────────────────
     USDT_TRC20_CONFIRMATIONS: int = 6
-    BTC_CONFIRMATIONS: int = 3
-    ETH_CONFIRMATIONS: int = 12
-    LTC_CONFIRMATIONS: int = 6
 
     # ── Deal Defaults ────────────────────────────────────────
     DEFAULT_DEAL_DEADLINE_DAYS: int = 7

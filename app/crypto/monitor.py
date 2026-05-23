@@ -1,11 +1,12 @@
 """
-Blockchain monitoring service.
-Polls all active escrow wallets and updates deal status when payment is detected.
+Blockchain monitoring service — USDT TRC20 only.
+Polls active escrow wallets and updates deal status when payment is detected.
 Runs as a background worker via APScheduler.
 """
 from __future__ import annotations
 
 import asyncio
+import os
 from datetime import datetime, timezone
 from decimal import Decimal
 
@@ -13,33 +14,25 @@ from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-import os
-
 from app.config import settings
 from app.database import AsyncSessionFactory
-from app.models.deal import Deal, DealStatus, Currency
+from app.models.deal import Deal, DealStatus
 from app.models.transaction import Transaction, TxStatus
 from app.models.wallet import Chain, Wallet
-from app.security.encryption import decrypt_private_key
 
 _LOCAL_DEV = os.environ.get("LOCAL_DEV", "true").lower() == "true"
 
 if not _LOCAL_DEV:
-    from app.crypto.btc_client import BlockClient
-    from app.crypto.eth_client import EthClient
     from app.crypto.tron_client import TronClient
 
 
 class BlockchainMonitor:
-    """Poll active wallets and detect incoming payments."""
+    """Poll active TRC20 wallets and detect incoming USDT payments."""
 
     def __init__(self) -> None:
         self._local_dev = _LOCAL_DEV
         if not self._local_dev:
             self._tron = TronClient()
-            self._eth = EthClient()
-            self._btc = BlockClient("BTC")
-            self._ltc = BlockClient("LTC")
 
     async def run_cycle(self) -> None:
         """One full monitoring pass across all active wallets."""
@@ -72,13 +65,6 @@ class BlockchainMonitor:
         try:
             if wallet.chain == Chain.TRON:
                 await self._check_tron(session, wallet)
-            elif wallet.chain == Chain.ETHEREUM:
-                await self._check_eth(session, wallet)
-            elif wallet.chain == Chain.BITCOIN:
-                await self._check_btc(session, wallet)
-            elif wallet.chain == Chain.LITECOIN:
-                await self._check_ltc(session, wallet)
-
             wallet.last_checked_at = datetime.now(timezone.utc)
             wallet.check_count += 1
             await session.commit()
@@ -100,43 +86,6 @@ class BlockchainMonitor:
                 required=settings.USDT_TRC20_CONFIRMATIONS,
             )
 
-    async def _check_eth(self, session: AsyncSession, wallet: Wallet) -> None:
-        deal = await self._get_deal(session, wallet)
-        if not deal:
-            return
-
-        from_block = 0
-        txs = await self._eth.get_incoming_txs(wallet.address, from_block=from_block)
-        for tx_data in txs:
-            await self._record_transaction(
-                session, deal, wallet, tx_data,
-                required=settings.ETH_CONFIRMATIONS,
-            )
-
-    async def _check_btc(self, session: AsyncSession, wallet: Wallet) -> None:
-        deal = await self._get_deal(session, wallet)
-        if not deal:
-            return
-
-        txs = await self._btc.get_transactions(wallet.address)
-        for tx_data in txs:
-            await self._record_transaction(
-                session, deal, wallet, tx_data,
-                required=settings.BTC_CONFIRMATIONS,
-            )
-
-    async def _check_ltc(self, session: AsyncSession, wallet: Wallet) -> None:
-        deal = await self._get_deal(session, wallet)
-        if not deal:
-            return
-
-        txs = await self._ltc.get_transactions(wallet.address)
-        for tx_data in txs:
-            await self._record_transaction(
-                session, deal, wallet, tx_data,
-                required=settings.LTC_CONFIRMATIONS,
-            )
-
     async def _record_transaction(
         self,
         session: AsyncSession,
@@ -147,7 +96,6 @@ class BlockchainMonitor:
     ) -> None:
         tx_hash = tx_data["tx_hash"]
 
-        # Duplicate prevention
         existing = await session.execute(
             select(Transaction).where(Transaction.tx_hash == tx_hash)
         )
@@ -157,7 +105,6 @@ class BlockchainMonitor:
         amount = tx_data["amount"]
 
         if existing_tx:
-            # Update confirmation count only
             if existing_tx.status == TxStatus.CONFIRMED:
                 return
             existing_tx.confirmations = confirmations
@@ -167,7 +114,6 @@ class BlockchainMonitor:
                 await self._on_payment_confirmed(session, deal, wallet, amount)
             return
 
-        # New transaction
         status = TxStatus.CONFIRMED if confirmations >= required else TxStatus.CONFIRMING
         new_tx = Transaction(
             deal_id=deal.id,
@@ -201,11 +147,9 @@ class BlockchainMonitor:
         amount: Decimal,
     ) -> None:
         if deal.status == DealStatus.FUNDED:
-            return  # Already funded
+            return
 
         wallet.confirmed_balance += amount
-
-        # Check if sufficient (allow small rounding tolerance of 0.01%)
         expected = deal.amount
         tolerance = expected * Decimal("0.0001")
         if wallet.confirmed_balance >= (expected - tolerance):
@@ -215,7 +159,6 @@ class BlockchainMonitor:
                 f"[Monitor] Deal {deal.deal_number} FUNDED "
                 f"({wallet.confirmed_balance} {deal.currency.value})"
             )
-            # Notification is handled by the notification worker watching for FUNDED deals
         else:
             logger.info(
                 f"[Monitor] Partial payment for deal {deal.deal_number}: "
@@ -223,6 +166,5 @@ class BlockchainMonitor:
             )
 
     async def _get_deal(self, session: AsyncSession, wallet: Wallet) -> Deal | None:
-        stmt = select(Deal).where(Deal.escrow_wallet_id == wallet.id)
-        result = await session.execute(stmt)
+        result = await session.execute(select(Deal).where(Deal.escrow_wallet_id == wallet.id))
         return result.scalar_one_or_none()

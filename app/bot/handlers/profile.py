@@ -5,8 +5,10 @@ from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
+from app.bot.handlers.pin_input import build_pin_message
 from app.bot.keyboards.main_menu import back_kb, main_menu_kb
 from app.bot.states.pin import PinStates
+from app.bot.states.pin_reset import PinResetStates
 from app.database import AsyncSessionFactory
 from app.services.audit_service import AuditService
 from app.services.user_service import UserService
@@ -115,118 +117,52 @@ async def show_referral(callback: CallbackQuery, db_user) -> None:
 async def start_set_pin(callback: CallbackQuery, state: FSMContext, db_user) -> None:
     if not db_user:
         return
-    await state.set_state(PinStates.set_new)
-    await callback.message.answer("Enter your new 4–8 digit PIN:")
+    await state.update_data(pin_buffer="")
+    await state.set_state(PinResetStates.waiting_for_new_pin)
+    text, kb = build_pin_message(PinResetStates.waiting_for_new_pin.state, 0)
+    await callback.message.answer(text, reply_markup=kb, parse_mode="HTML")
     await callback.answer()
-
-
-@router.message(PinStates.set_new)
-async def pin_set_new(message: Message, state: FSMContext, db_user) -> None:
-    pin = message.text.strip() if message.text else ""
-    try:
-        await message.delete()
-    except Exception:
-        pass
-    if not pin.isdigit() or not (4 <= len(pin) <= 8):
-        await message.answer("❌ PIN must be 4–8 digits.")
-        return
-    await state.update_data(new_pin=pin)
-    await state.set_state(PinStates.confirm_new)
-    await message.answer("Re-enter the PIN to confirm:")
-
-
-@router.message(PinStates.confirm_new)
-async def pin_confirm_new(message: Message, state: FSMContext, db_user) -> None:
-    pin = message.text.strip() if message.text else ""
-    try:
-        await message.delete()
-    except Exception:
-        pass
-    data = await state.get_data()
-    if pin != data.get("new_pin"):
-        await state.set_state(PinStates.set_new)
-        await message.answer("❌ PINs don't match. Start over:")
-        return
-
-    async with AsyncSessionFactory() as session:
-        svc = UserService(session)
-        audit = AuditService(session)
-        user = await svc.get_by_telegram_id(message.from_user.id)
-        await svc.set_pin(user, pin)
-        await audit.pin_set(user.id)
-        await session.commit()
-
-    await state.clear()
-    await message.answer("✅ PIN set successfully!", reply_markup=main_menu_kb())
 
 
 @router.callback_query(F.data == "profile:change_pin")
 async def start_change_pin(callback: CallbackQuery, state: FSMContext) -> None:
+    await state.update_data(pin_buffer="")
     await state.set_state(PinStates.change_old)
-    await callback.message.answer("Enter your current PIN:")
+    text, kb = build_pin_message(PinStates.change_old.state, 0)
+    await callback.message.answer(text, reply_markup=kb, parse_mode="HTML")
     await callback.answer()
 
 
-@router.message(PinStates.change_old)
-async def pin_change_verify_old(message: Message, state: FSMContext) -> None:
-    pin = message.text.strip() if message.text else ""
-    try:
-        await message.delete()
-    except Exception:
-        pass
+@router.callback_query(F.data == "pin:submit", PinStates.change_old)
+async def change_pin_verify_old(callback: CallbackQuery, state: FSMContext) -> None:
+    data = await state.get_data()
+    pin = data.get("pin_buffer", "")
+
+    if not pin.isdigit() or not (4 <= len(pin) <= 8):
+        await callback.answer("Enter your current PIN first.", show_alert=True)
+        return
 
     async with AsyncSessionFactory() as session:
         svc = UserService(session)
         audit = AuditService(session)
-        user = await svc.get_by_telegram_id(message.from_user.id)
+        user = await svc.get_by_telegram_id(callback.from_user.id)
         ok = await svc.verify_pin(user, pin)
         if not ok:
             await audit.pin_failed(user.id)
             await session.commit()
-            remaining = 5 - user.pin_attempts if user.pin_attempts < 5 else 0
-            await message.answer(f"❌ Wrong PIN. {remaining} attempts remaining.")
+            await state.update_data(pin_buffer="")
+            text, kb = build_pin_message(PinStates.change_old.state, 0)
+            await callback.message.edit_text(
+                "❌ Wrong PIN. Try again:\n\n" + text.split("\n\n", 1)[-1],
+                reply_markup=kb,
+                parse_mode="HTML",
+            )
+            await callback.answer()
             return
         await session.commit()
 
-    await state.set_state(PinStates.change_new)
-    await message.answer("Enter your new PIN:")
-
-
-@router.message(PinStates.change_new)
-async def pin_change_new(message: Message, state: FSMContext) -> None:
-    pin = message.text.strip() if message.text else ""
-    try:
-        await message.delete()
-    except Exception:
-        pass
-    if not pin.isdigit() or not (4 <= len(pin) <= 8):
-        await message.answer("❌ PIN must be 4–8 digits.")
-        return
-    await state.update_data(new_pin=pin)
-    await state.set_state(PinStates.change_confirm)
-    await message.answer("Confirm your new PIN:")
-
-
-@router.message(PinStates.change_confirm)
-async def pin_change_confirm(message: Message, state: FSMContext) -> None:
-    pin = message.text.strip() if message.text else ""
-    try:
-        await message.delete()
-    except Exception:
-        pass
-    data = await state.get_data()
-    if pin != data.get("new_pin"):
-        await state.set_state(PinStates.change_new)
-        await message.answer("❌ PINs don't match. Enter new PIN again:")
-        return
-
-    async with AsyncSessionFactory() as session:
-        svc = UserService(session)
-        audit = AuditService(session)
-        user = await svc.get_by_telegram_id(message.from_user.id)
-        await svc.set_pin(user, pin)
-        await audit.pin_set(user.id)
-        await session.commit()
-
-    await state.clear()
-    await message.answer("✅ PIN changed successfully!", reply_markup=main_menu_kb())
+    await state.update_data(pin_buffer="")
+    await state.set_state(PinResetStates.waiting_for_new_pin)
+    text, kb = build_pin_message(PinResetStates.waiting_for_new_pin.state, 0)
+    await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+    await callback.answer()

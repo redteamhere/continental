@@ -15,6 +15,7 @@ from aiogram.types import CallbackQuery, Message
 from app.bot.keyboards.pin_kb import MAX_PIN, pin_dots, pin_pad_kb, pin_remove_kb
 from app.bot.keyboards.main_menu import main_menu_kb
 from app.bot.states.deal_creation import DealCreationStates
+from app.bot.states.pin import PinStates
 from app.bot.states.registration import RegistrationStates
 from app.bot.states.pin_reset import PinResetStates
 
@@ -55,6 +56,12 @@ _CFG: dict[str | None, tuple[str, str, str, bool]] = {
     PinResetStates.confirm_new_pin.state: (
         "🔑 <b>Confirm New PIN</b>",
         "Re-enter your new PIN to confirm.",
+        "pin:cancel",
+        False,
+    ),
+    PinStates.change_old.state: (
+        "🔐 <b>Verify Current PIN</b>",
+        "Enter your current PIN to continue.",
         "pin:cancel",
         False,
     ),

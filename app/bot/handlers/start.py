@@ -68,6 +68,25 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
             else:
                 text, kb = build_pin_message(RegistrationStates.waiting_for_pin.state, 0)
                 await message.answer(text, reply_markup=kb, parse_mode="HTML")
+        elif not user.pin_hash:
+            # Existing user with no PIN — admin reset their PIN
+            await state.update_data(pin_buffer="")
+            await state.set_state(RegistrationStates.waiting_for_pin)
+            if _settings.WEB_APP_URL:
+                await message.answer(
+                    "🔑 <b>PIN Required</b>\n\n"
+                    "Your PIN was reset. Please set a new PIN to continue using the bot.",
+                    reply_markup=pin_webapp_kb(_settings.WEB_APP_URL, "set"),
+                    parse_mode="HTML",
+                )
+            else:
+                text, kb = build_pin_message(RegistrationStates.waiting_for_pin.state, 0)
+                await message.answer(
+                    "🔑 <b>Your PIN was reset.</b> Please create a new PIN.\n\n"
+                    + text.split("\n\n", 1)[-1],
+                    reply_markup=kb,
+                    parse_mode="HTML",
+                )
         else:
             await message.answer(
                 WELCOME_BACK.format(name=tg_user.first_name),

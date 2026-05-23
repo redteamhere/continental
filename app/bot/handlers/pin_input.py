@@ -16,42 +16,59 @@ from app.bot.keyboards.pin_kb import MAX_PIN, pin_dots, pin_pad_kb, pin_remove_k
 from app.bot.keyboards.main_menu import main_menu_kb
 from app.bot.states.deal_creation import DealCreationStates
 from app.bot.states.registration import RegistrationStates
+from app.bot.states.pin_reset import PinResetStates
 
 router = Router()
 
-# ── Per-state display config (title, subtitle, cancel callback) ──────────────
-_CFG: dict[str | None, tuple[str, str, str]] = {
+# ── Per-state display config: (title, subtitle, cancel_cb, show_forgot) ──────
+_CFG: dict[str | None, tuple[str, str, str, bool]] = {
     RegistrationStates.waiting_for_pin.state: (
         "🔐 <b>Create PIN</b>",
         "Choose a 4–8 digit security PIN.\nTap ✅ when done.",
         "pin:cancel_reg",
+        False,
     ),
     RegistrationStates.confirm_pin.state: (
         "🔐 <b>Confirm PIN</b>",
         "Re-enter your PIN to confirm.",
         "pin:cancel_reg",
+        False,
     ),
     DealCreationStates.confirm_pin.state: (
         "🔐 <b>Confirm Deal</b>",
         "Enter your PIN to create the deal.",
         "deal:cancel_creation",
+        True,   # show Forgot PIN?
     ),
     "ReleasePinState:verify": (
         "🔐 <b>Release Funds</b>",
         "Enter your PIN to release funds to the seller.",
         "pin:cancel",
+        True,   # show Forgot PIN?
+    ),
+    PinResetStates.waiting_for_new_pin.state: (
+        "🔑 <b>New PIN</b>",
+        "Choose a new 4–8 digit PIN.\nTap ✅ when done.",
+        "pin:cancel",
+        False,
+    ),
+    PinResetStates.confirm_new_pin.state: (
+        "🔑 <b>Confirm New PIN</b>",
+        "Re-enter your new PIN to confirm.",
+        "pin:cancel",
+        False,
     ),
 }
 
-_DEFAULT_CFG = ("🔐 <b>Enter PIN</b>", "", "pin:cancel")
+_DEFAULT_CFG = ("🔐 <b>Enter PIN</b>", "", "pin:cancel", False)
 
 
 def build_pin_message(state_str: str | None, digits: int) -> tuple[str, object]:
-    title, subtitle, cancel = _CFG.get(state_str, _DEFAULT_CFG)
+    title, subtitle, cancel, show_forgot = _CFG.get(state_str, _DEFAULT_CFG)
     dots = pin_dots(digits)
     body = f"\n{subtitle}" if subtitle else ""
     text = f"{title}{body}\n\n<code>{dots}</code>"
-    return text, pin_pad_kb(digits, cancel_data=cancel)
+    return text, pin_pad_kb(digits, cancel_data=cancel, show_forgot=show_forgot)
 
 
 # ── Handlers ─────────────────────────────────────────────────────────────────
@@ -143,6 +160,9 @@ async def web_app_pin_received(message: Message, state: FSMContext, db_user) -> 
 
     if mode == "set" and state_str == RegistrationStates.waiting_for_pin.state:
         await _webapp_register(message, state, pin)
+
+    elif mode == "set" and state_str == PinResetStates.waiting_for_new_pin.state:
+        await _webapp_pin_reset_set(message, state, pin)
 
     elif mode == "verify" and state_str == DealCreationStates.confirm_pin.state:
         await _webapp_deal_pin(message, state, pin)
@@ -277,3 +297,31 @@ async def _webapp_release_pin(message: Message, state: FSMContext, pin: str) -> 
     )
     from app.bot.keyboards.deal_kb import review_stars_kb as _stars_kb
     await message.answer("⭐ Rate the seller:", reply_markup=_stars_kb(deal.id))
+
+
+async def _webapp_pin_reset_set(message: Message, state: FSMContext, pin: str) -> None:
+    """Called when webapp sends a new PIN during the reset flow."""
+    from app.database import AsyncSessionFactory
+    from app.services.user_service import UserService
+    from app.services.audit_service import AuditService
+
+    async with AsyncSessionFactory() as session:
+        svc = UserService(session)
+        user = await svc.get_by_telegram_id(message.from_user.id)
+        if not user:
+            await message.answer("❌ User not found.")
+            await state.clear()
+            return
+        await svc.set_pin(user, pin)
+        await AuditService(session).pin_reset(user.id)
+        await session.commit()
+
+    await state.clear()
+    await message.answer(
+        "✅ <b>PIN reset successfully!</b>\n\n"
+        "Your new PIN has been saved. Go back to your deal and try again.",
+        reply_markup=pin_remove_kb(),
+        parse_mode="HTML",
+    )
+    from app.bot.keyboards.main_menu import main_menu_kb as _menu_kb
+    await message.answer("🏠 <b>Main Menu</b>", reply_markup=_menu_kb(), parse_mode="HTML")

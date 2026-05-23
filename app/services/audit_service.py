@@ -61,5 +61,12 @@ class AuditService:
     async def pin_failed(self, user_id: int) -> None:
         await self.log("user.pin_failed", user_id=user_id)
 
+    async def pin_reset(self, user_id: int, by_admin_id: Optional[int] = None) -> None:
+        await self.log(
+            "user.pin_reset",
+            user_id=user_id,
+            details={"by_admin": by_admin_id},
+        )
+
     async def admin_action(self, admin_id: int, action: str, details: dict) -> None:
         await self.log(f"admin.{action}", user_id=admin_id, details=details)

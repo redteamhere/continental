@@ -84,6 +84,12 @@ class UserService:
         user.pin_attempts = 0
         user.pin_locked_until = None
 
+    async def reset_pin(self, user: User) -> None:
+        """Clear PIN so the user must create a new one."""
+        user.pin_hash = None
+        user.pin_attempts = 0
+        user.pin_locked_until = None
+
     async def verify_pin(self, user: User, pin: str) -> bool:
         """Verify PIN with lockout protection. Returns True on success."""
         if PinManager.is_locked(user.pin_locked_until):

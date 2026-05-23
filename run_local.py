@@ -86,8 +86,9 @@ async def main():
         BotCommand(command="help",  description="How to use this bot"),
     ]
     admin_commands = user_commands + [
-        BotCommand(command="admin",   description="Open admin panel"),
-        BotCommand(command="sim_pay", description="[DEV] Simulate payment for a deal"),
+        BotCommand(command="admin",     description="Open admin panel"),
+        BotCommand(command="sim_pay",   description="[DEV] Simulate payment for a deal"),
+        BotCommand(command="reset_pin", description="Force-reset a user's PIN"),
     ]
 
     await bot.set_my_commands(user_commands, scope=BotCommandScopeDefault())

@@ -32,7 +32,11 @@ def pin_remove_kb() -> ReplyKeyboardRemove:
     return ReplyKeyboardRemove()
 
 
-def pin_pad_kb(digits: int, cancel_data: str = "pin:cancel") -> InlineKeyboardMarkup:
+def pin_pad_kb(
+    digits: int,
+    cancel_data: str = "pin:cancel",
+    show_forgot: bool = False,
+) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for row_nums in [(1, 2, 3), (4, 5, 6), (7, 8, 9)]:
         builder.row(*[
@@ -49,4 +53,8 @@ def pin_pad_kb(digits: int, cancel_data: str = "pin:cancel") -> InlineKeyboardMa
         InlineKeyboardButton(text="0", callback_data="pin:d:0"),
         right,
     )
+    if show_forgot:
+        builder.row(
+            InlineKeyboardButton(text="🔑 Forgot PIN?", callback_data="pin:forgot")
+        )
     return builder.as_markup()

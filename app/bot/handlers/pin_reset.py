@@ -162,6 +162,7 @@ async def reset_pin_confirm(callback: CallbackQuery, state: FSMContext) -> None:
 async def admin_reset_pin(message: Message, db_user) -> None:
     """Admin only: /reset_pin <telegram_id_or_@username>"""
     if not db_user or not db_user.is_moderator:
+        await message.answer("⛔ You don't have permission to use this command.")
         return
 
     parts = message.text.strip().split(maxsplit=1)

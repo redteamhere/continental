@@ -9,7 +9,9 @@ from typing import Any, Awaitable, Callable
 from aiogram import BaseMiddleware
 from aiogram.types import Message, CallbackQuery, TelegramObject
 
+from app.config import settings
 from app.database import AsyncSessionFactory
+from app.models.user import UserRole
 from app.services.user_service import UserService
 
 
@@ -30,6 +32,13 @@ class AuthMiddleware(BaseMiddleware):
 
             if user:
                 await svc.update_last_active(user)
+
+                # Auto-promote to ADMIN if their Telegram ID is in ADMIN_IDS
+                # but their DB role hasn't been set yet (e.g. registered before
+                # being added to ADMIN_IDS).
+                if tg_user.id in settings.ADMIN_IDS and user.role == UserRole.USER:
+                    user.role = UserRole.ADMIN
+
                 await session.commit()
 
                 if user.is_banned:

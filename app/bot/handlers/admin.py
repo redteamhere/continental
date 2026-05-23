@@ -28,13 +28,17 @@ from app.services.user_service import UserService
 router = Router()
 
 
-def _is_admin_or_mod(db_user) -> bool:
-    return db_user and db_user.is_moderator
+def _is_admin_or_mod(db_user, tg_id: int = 0) -> bool:
+    from app.config import settings
+    return bool(
+        (db_user and db_user.is_moderator)
+        or tg_id in settings.ADMIN_IDS
+    )
 
 
 @router.message(Command("admin"))
 async def admin_panel(message: Message, db_user) -> None:
-    if not _is_admin_or_mod(db_user):
+    if not _is_admin_or_mod(db_user, message.from_user.id):
         return
     await message.answer(
         "👑 <b>Admin Panel</b>",
@@ -45,7 +49,7 @@ async def admin_panel(message: Message, db_user) -> None:
 
 @router.callback_query(F.data == "admin:disputes")
 async def list_disputes(callback: CallbackQuery, db_user) -> None:
-    if not _is_admin_or_mod(db_user):
+    if not _is_admin_or_mod(db_user, callback.from_user.id):
         await callback.answer("Not authorized.", show_alert=True)
         return
 
@@ -87,7 +91,7 @@ async def list_disputes(callback: CallbackQuery, db_user) -> None:
 
 @router.callback_query(F.data.startswith("admin:dispute_detail:"))
 async def dispute_detail(callback: CallbackQuery, db_user) -> None:
-    if not _is_admin_or_mod(db_user):
+    if not _is_admin_or_mod(db_user, callback.from_user.id):
         await callback.answer("Not authorized.", show_alert=True)
         return
 
@@ -127,7 +131,7 @@ async def dispute_detail(callback: CallbackQuery, db_user) -> None:
 
 @router.callback_query(F.data.startswith("admin:resolve:"))
 async def resolve_dispute(callback: CallbackQuery, state: FSMContext, db_user) -> None:
-    if not _is_admin_or_mod(db_user):
+    if not _is_admin_or_mod(db_user, callback.from_user.id):
         await callback.answer("Not authorized.", show_alert=True)
         return
 
@@ -297,7 +301,7 @@ async def unban_user(callback: CallbackQuery, db_user) -> None:
 
 @router.callback_query(F.data == "admin:stats")
 async def admin_stats(callback: CallbackQuery, db_user) -> None:
-    if not _is_admin_or_mod(db_user):
+    if not _is_admin_or_mod(db_user, callback.from_user.id):
         await callback.answer("Not authorized.", show_alert=True)
         return
 

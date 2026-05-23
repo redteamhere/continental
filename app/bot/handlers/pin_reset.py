@@ -158,10 +158,18 @@ async def reset_pin_confirm(callback: CallbackQuery, state: FSMContext) -> None:
 
 # ── Admin force-reset ─────────────────────────────────────────────────────────
 
+def _is_admin(db_user, tg_id: int) -> bool:
+    from app.config import settings
+    return bool(
+        (db_user and db_user.is_moderator)
+        or tg_id in settings.ADMIN_IDS
+    )
+
+
 @router.message(Command("reset_pin"))
 async def admin_reset_pin(message: Message, db_user) -> None:
     """Admin only: /reset_pin <telegram_id_or_@username>"""
-    if not db_user or not db_user.is_moderator:
+    if not _is_admin(db_user, message.from_user.id):
         await message.answer("⛔ You don't have permission to use this command.")
         return
 

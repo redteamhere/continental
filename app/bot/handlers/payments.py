@@ -62,16 +62,33 @@ async def show_payment_details(callback: CallbackQuery, db_user) -> None:
     label = currency_labels.get(deal.currency.value, deal.currency.value)
     warning = network_warnings.get(deal.currency.value, "")
 
+    from app.config import settings as _cfg
+    from app.services.escrow_service import _cold_wallet_address
+    from app.models.deal import Currency as _Cur
+    is_cold = bool(_cold_wallet_address(_Cur(deal.currency.value)))
+
+    if is_cold:
+        confirm_note = (
+            f"📌 <b>Important — include your Deal ID as the memo/reference:</b>\n"
+            f"<code>{deal.deal_number}</code>\n\n"
+            f"After sending, the admin will verify and confirm your payment.\n"
+            f"You will be notified once confirmed."
+        )
+    else:
+        confirm_note = (
+            f"🔄 This bot monitors the blockchain automatically.\n"
+            f"Your deal will update once payment is confirmed."
+        )
+
     text = (
         f"💳 <b>Fund Escrow Wallet</b>\n\n"
         f"Deal: <code>{deal.deal_number}</code>\n\n"
         f"Send exactly:\n"
         f"<code>{deal.amount}</code> <b>{label}</b>\n\n"
-        f"To address:\n"
+        f"To this address:\n"
         f"<code>{wallet.address}</code>\n\n"
         f"{warning}\n\n"
-        f"🔄 This bot monitors the blockchain automatically.\n"
-        f"Your deal will update once payment is confirmed."
+        f"{confirm_note}"
     )
 
     # Send QR code as photo

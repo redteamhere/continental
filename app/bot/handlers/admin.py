@@ -333,6 +333,77 @@ async def admin_stats(callback: CallbackQuery, db_user) -> None:
     await callback.answer()
 
 
+# ── Admin: confirm payment received ──────────────────────────
+
+@router.message(Command("confirm_payment"))
+async def confirm_payment(message: Message, db_user) -> None:
+    """Admin: /confirm_payment DEAL-XXXXX  — mark deal as funded after verifying receipt."""
+    if not _is_admin_or_mod(db_user, message.from_user.id):
+        await message.answer("⛔ Admin only.")
+        return
+
+    parts = message.text.strip().split(maxsplit=1)
+    if len(parts) < 2:
+        await message.answer(
+            "Usage: <code>/confirm_payment DEAL-XXXXXX</code>\n"
+            "Example: <code>/confirm_payment ESC-5F0DCD</code>",
+            parse_mode="HTML",
+        )
+        return
+
+    deal_number = parts[1].strip().upper()
+
+    async with AsyncSessionFactory() as session:
+        result = await session.execute(
+            select(Deal).where(Deal.deal_number == deal_number)
+        )
+        deal = result.scalar_one_or_none()
+
+        if not deal:
+            await message.answer(f"❌ Deal <code>{deal_number}</code> not found.", parse_mode="HTML")
+            return
+
+        if deal.status != DealStatus.AWAITING_PAYMENT:
+            await message.answer(
+                f"❌ Deal is in <b>{deal.status.value}</b> status — "
+                f"can only confirm payment for <b>awaiting_payment</b> deals.",
+                parse_mode="HTML",
+            )
+            return
+
+        deal.status = DealStatus.FUNDED
+        deal.funded_at = datetime.now(timezone.utc)
+
+        if deal.escrow_wallet_id:
+            wallet_result = await session.execute(
+                select(Wallet).where(Wallet.id == deal.escrow_wallet_id)
+            )
+            wallet = wallet_result.scalar_one_or_none()
+            if wallet:
+                wallet.confirmed_balance = deal.amount
+
+        svc = UserService(session)
+        buyer = await svc.get_by_id(deal.buyer_id)
+        seller = await svc.get_by_id(deal.seller_id)
+
+        notif = NotificationService(session, message.bot)
+        await notif.payment_confirmed(deal, buyer, seller)
+        await session.commit()
+        funded_deal_id = deal.id
+
+    import asyncio
+    from app.services.group_service import create_and_notify_group
+    asyncio.create_task(create_and_notify_group(funded_deal_id, message.bot))
+
+    await message.answer(
+        f"✅ <b>Payment confirmed</b>\n\n"
+        f"Deal <code>{deal_number}</code> is now <b>FUNDED</b>.\n"
+        f"Buyer and seller have been notified.\n"
+        f"A private deal group is being created.",
+        parse_mode="HTML",
+    )
+
+
 # ── LOCAL_DEV: simulate payment ───────────────────────────────
 
 @router.message(Command("sim_pay"))

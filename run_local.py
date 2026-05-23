@@ -86,10 +86,11 @@ async def main():
         BotCommand(command="help",  description="How to use this bot"),
     ]
     admin_commands = user_commands + [
-        BotCommand(command="admin",     description="Open admin panel"),
-        BotCommand(command="sim_pay",   description="[DEV] Simulate payment for a deal"),
-        BotCommand(command="reset_pin", description="Force-reset a user's PIN"),
-        BotCommand(command="myid",      description="Show your Telegram ID and admin status"),
+        BotCommand(command="admin",           description="Open admin panel"),
+        BotCommand(command="confirm_payment", description="Confirm buyer payment for a deal"),
+        BotCommand(command="reset_pin",       description="Force-reset a user's PIN"),
+        BotCommand(command="sim_pay",         description="[DEV] Simulate payment for a deal"),
+        BotCommand(command="myid",            description="Show your Telegram ID and admin status"),
     ]
 
     await bot.set_my_commands(user_commands, scope=BotCommandScopeDefault())

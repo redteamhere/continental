@@ -31,19 +31,46 @@ def _chain_for_currency(currency: Currency) -> Chain:
     return Chain(currency.chain)
 
 
+def _cold_wallet_address(currency: Currency) -> str:
+    """Return the admin cold wallet address for this currency, or empty string."""
+    return {
+        "USDT_TRC20": settings.COLD_WALLET_USDT_TRC20,
+        "BTC":        settings.COLD_WALLET_BTC,
+        "ETH":        settings.COLD_WALLET_ETH,
+        "LTC":        settings.COLD_WALLET_LTC,
+    }.get(currency.value, "")
+
+
 class EscrowService:
     def __init__(self, session: AsyncSession) -> None:
         self._s = session
         self._tron = TronClient()
 
     async def create_escrow_wallet(self, deal: Deal) -> Wallet:
-        """Generate a unique escrow wallet for the deal."""
-        generator = _get_wallet_generator()
+        """
+        Create escrow wallet for the deal.
+        Cold wallet mode (preferred): uses the admin's pre-configured address.
+        HD wallet mode (fallback): derives a unique address from MASTER_MNEMONIC.
+        """
         chain = _chain_for_currency(deal.currency)
+        cold_addr = _cold_wallet_address(deal.currency)
 
-        # Use deal.id as HD wallet index for reproducibility
+        if cold_addr:
+            # Cold wallet mode — buyer sends to admin's fixed address
+            wallet = Wallet(
+                deal_id=deal.id,
+                chain=chain,
+                address=cold_addr,
+                expected_amount=deal.amount,
+            )
+            self._s.add(wallet)
+            await self._s.flush()
+            logger.info(f"[Escrow] Assigned cold wallet {cold_addr[:16]}... for deal {deal.deal_number}")
+            return wallet
+
+        # HD wallet mode — derive unique address per deal
+        generator = _get_wallet_generator()
         generated = generator.derive_wallet(chain, deal.id)
-
         encrypted_pk = encrypt_private_key(generated.private_key)
         wallet = Wallet(
             deal_id=deal.id,
@@ -56,7 +83,7 @@ class EscrowService:
         )
         self._s.add(wallet)
         await self._s.flush()
-        logger.info(f"[Escrow] Created wallet {wallet.address[:16]}... for deal {deal.deal_number}")
+        logger.info(f"[Escrow] Created HD wallet {wallet.address[:16]}... for deal {deal.deal_number}")
         return wallet
 
     async def get_wallet_for_deal(self, deal: Deal) -> Optional[Wallet]:

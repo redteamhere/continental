@@ -56,6 +56,14 @@ class Settings(BaseSettings):
     MIN_DEAL_AMOUNT_USD: float = 10.0
     MAX_DEAL_AMOUNT_USD: float = 100_000.0
 
+    # ── Admin cold wallets (manual escrow mode) ─────────────
+    # Set these in Railway. When set, buyers send to these fixed addresses.
+    # Admin confirms receipt via /confirm_payment DEAL-XXXXX.
+    COLD_WALLET_USDT_TRC20: str = ""
+    COLD_WALLET_BTC: str = ""
+    COLD_WALLET_ETH: str = ""
+    COLD_WALLET_LTC: str = ""
+
     # ── Blockchain ───────────────────────────────────────────
     TRON_API_KEY: str = ""
     TRON_NETWORK: str = "mainnet"

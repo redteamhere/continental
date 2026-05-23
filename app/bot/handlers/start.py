@@ -11,6 +11,7 @@ from app.bot.keyboards.pin_kb import pin_dots, pin_pad_kb, pin_webapp_kb, pin_re
 from app.bot.handlers.pin_input import build_pin_message
 from app.config import settings as _settings
 from app.bot.states.registration import RegistrationStates
+from app.bot.states.pin_reset import PinResetStates
 from app.database import AsyncSessionFactory
 from app.services.user_service import UserService
 from app.services.audit_service import AuditService
@@ -69,9 +70,9 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
                 text, kb = build_pin_message(RegistrationStates.waiting_for_pin.state, 0)
                 await message.answer(text, reply_markup=kb, parse_mode="HTML")
         elif not user.pin_hash:
-            # Existing user with no PIN — admin reset their PIN
+            # Existing user with no PIN — use PinResetStates so webapp routes to set_pin, not create
             await state.update_data(pin_buffer="")
-            await state.set_state(RegistrationStates.waiting_for_pin)
+            await state.set_state(PinResetStates.waiting_for_new_pin)
             if _settings.WEB_APP_URL:
                 await message.answer(
                     "🔑 <b>PIN Required</b>\n\n"
@@ -80,7 +81,7 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
                     parse_mode="HTML",
                 )
             else:
-                text, kb = build_pin_message(RegistrationStates.waiting_for_pin.state, 0)
+                text, kb = build_pin_message(PinResetStates.waiting_for_new_pin.state, 0)
                 await message.answer(
                     "🔑 <b>Your PIN was reset.</b> Please create a new PIN.\n\n"
                     + text.split("\n\n", 1)[-1],

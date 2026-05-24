@@ -56,9 +56,12 @@ class Settings(BaseSettings):
     MIN_DEAL_AMOUNT_USD: float = 10.0
     MAX_DEAL_AMOUNT_USD: float = 100_000.0
 
-    # ── Admin cold wallet (USDT TRC20) ──────────────────────
-    # Buyer sends to this address; admin confirms via /confirm_payment DEAL-XXXXX
+    # ── Admin cold wallets ───────────────────────────────────
+    # Set in Railway. Buyer sends here; admin confirms via /confirm_payment DEAL-XXXXX
     COLD_WALLET_USDT_TRC20: str = ""
+    COLD_WALLET_USDT_BEP20: str = ""
+    COLD_WALLET_USDT_ERC20: str = ""
+    COLD_WALLET_BTC:        str = ""
 
     # ── Tron / USDT TRC20 ────────────────────────────────────
     TRON_API_KEY: str = ""

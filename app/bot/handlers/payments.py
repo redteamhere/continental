@@ -47,16 +47,16 @@ async def show_payment_details(callback: CallbackQuery, db_user) -> None:
             return
 
     currency_labels = {
-        "USDT_TRC20": "USDT (TRC20 network)",
-        "BTC": "Bitcoin (BTC)",
-        "ETH": "Ethereum (ETH)",
-        "LTC": "Litecoin (LTC)",
+        "USDT_TRC20": "USDT (TRC20 — TRON network)",
+        "USDT_BEP20": "USDT (BEP20 — BNB Smart Chain)",
+        "USDT_ERC20": "USDT (ERC20 — Ethereum network)",
+        "BTC":        "Bitcoin (BTC)",
     }
     network_warnings = {
-        "USDT_TRC20": "⚠️ Send ONLY via <b>TRC20</b> network. ETH/ERC20 will be lost.",
-        "BTC": "⚠️ Bitcoin network only. Do not send to other addresses.",
-        "ETH": "⚠️ Ethereum mainnet only.",
-        "LTC": "⚠️ Litecoin network only.",
+        "USDT_TRC20": "⚠️ Send ONLY via <b>TRC20 (TRON)</b> network.\nSending via ERC20 or BEP20 will result in loss of funds.",
+        "USDT_BEP20": "⚠️ Send ONLY via <b>BEP20 (BNB Smart Chain)</b> network.\nSending via TRC20 or ERC20 will result in loss of funds.",
+        "USDT_ERC20": "⚠️ Send ONLY via <b>ERC20 (Ethereum)</b> network.\nSending via TRC20 or BEP20 will result in loss of funds.",
+        "BTC":        "⚠️ Send ONLY to this <b>Bitcoin (BTC)</b> address.\nDo not send any other coin to this address.",
     }
 
     label = currency_labels.get(deal.currency.value, deal.currency.value)

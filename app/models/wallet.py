@@ -24,6 +24,7 @@ from app.database import Base
 class Chain(str, enum.Enum):
     TRON = "TRON"
     ETHEREUM = "ETHEREUM"
+    BSC = "BSC"
     BITCOIN = "BITCOIN"
     LITECOIN = "LITECOIN"
 
@@ -42,8 +43,8 @@ class Wallet(Base):
     chain: Mapped[Chain] = mapped_column(Enum(Chain), nullable=False)
     address: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
 
-    # Encrypted private key — NEVER exposed in logs or API responses
-    private_key_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
+    # Encrypted private key — NULL for admin cold wallets (no managed key)
+    private_key_encrypted: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # HD wallet derivation
     derivation_path: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)

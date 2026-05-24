@@ -25,10 +25,18 @@ from app.workers.scheduler import create_scheduler
 
 
 async def _migrate_columns() -> None:
-    """Add any new columns that didn't exist when the table was first created."""
+    """Add any new columns/types that didn't exist when the table was first created."""
     stmts = [
         "ALTER TABLE deals ADD COLUMN IF NOT EXISTS chat_group_id BIGINT",
         "ALTER TABLE deals ADD COLUMN IF NOT EXISTS chat_invite_link VARCHAR(256)",
+        # Make private_key_encrypted nullable (cold wallets have no managed key)
+        "ALTER TABLE wallets ALTER COLUMN private_key_encrypted DROP NOT NULL",
+        # Add new chain types if they don't exist yet
+        "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel='BSC' AND enumtypid=(SELECT oid FROM pg_type WHERE typname='chain')) THEN ALTER TYPE chain ADD VALUE 'BSC'; END IF; END $$",
+        # Add new currency types
+        "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel='USDT_BEP20' AND enumtypid=(SELECT oid FROM pg_type WHERE typname='currency')) THEN ALTER TYPE currency ADD VALUE 'USDT_BEP20'; END IF; END $$",
+        "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel='USDT_ERC20' AND enumtypid=(SELECT oid FROM pg_type WHERE typname='currency')) THEN ALTER TYPE currency ADD VALUE 'USDT_ERC20'; END IF; END $$",
+        "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel='BTC' AND enumtypid=(SELECT oid FROM pg_type WHERE typname='currency')) THEN ALTER TYPE currency ADD VALUE 'BTC'; END IF; END $$",
     ]
     async with engine.begin() as conn:
         for stmt in stmts:

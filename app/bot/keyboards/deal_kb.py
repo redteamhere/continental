@@ -6,7 +6,14 @@ from app.models.deal import Deal, DealStatus
 
 def currency_select_kb() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.row(InlineKeyboardButton(text="💵 USDT (TRC20)", callback_data="currency:USDT_TRC20"))
+    builder.row(
+        InlineKeyboardButton(text="💵 USDT TRC20", callback_data="currency:USDT_TRC20"),
+        InlineKeyboardButton(text="💵 USDT BEP20", callback_data="currency:USDT_BEP20"),
+    )
+    builder.row(
+        InlineKeyboardButton(text="💵 USDT ERC20", callback_data="currency:USDT_ERC20"),
+        InlineKeyboardButton(text="₿ BTC",         callback_data="currency:BTC"),
+    )
     builder.row(InlineKeyboardButton(text="❌ Cancel", callback_data="deal:cancel_creation"))
     return builder.as_markup()
 

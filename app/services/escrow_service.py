@@ -32,9 +32,12 @@ def _chain_for_currency(currency: Currency) -> Chain:
 
 def _cold_wallet_address(currency: Currency) -> str:
     """Return the admin cold wallet address for this currency, or empty string."""
-    if currency.value == "USDT_TRC20":
-        return settings.COLD_WALLET_USDT_TRC20
-    return ""
+    return {
+        "USDT_TRC20": settings.COLD_WALLET_USDT_TRC20,
+        "USDT_BEP20": settings.COLD_WALLET_USDT_BEP20,
+        "USDT_ERC20": settings.COLD_WALLET_USDT_ERC20,
+        "BTC":        settings.COLD_WALLET_BTC,
+    }.get(currency.value, "")
 
 
 class EscrowService:

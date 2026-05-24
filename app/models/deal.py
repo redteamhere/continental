@@ -35,14 +35,27 @@ class DealStatus(str, enum.Enum):
 
 class Currency(str, enum.Enum):
     USDT_TRC20 = "USDT_TRC20"
+    USDT_BEP20 = "USDT_BEP20"
+    USDT_ERC20 = "USDT_ERC20"
+    BTC        = "BTC"
 
     @property
     def chain(self) -> str:
-        return "TRON"
+        return {
+            "USDT_TRC20": "TRON",
+            "USDT_BEP20": "BSC",
+            "USDT_ERC20": "ETHEREUM",
+            "BTC":        "BITCOIN",
+        }[self.value]
 
     @property
     def symbol(self) -> str:
-        return "USDT"
+        return {
+            "USDT_TRC20": "USDT",
+            "USDT_BEP20": "USDT",
+            "USDT_ERC20": "USDT",
+            "BTC":        "BTC",
+        }[self.value]
 
 
 class Deal(Base):

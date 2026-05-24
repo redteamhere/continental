@@ -17,8 +17,8 @@ TRONGRID_SHASTA = "https://api.shasta.trongrid.io"
 
 class TronClient:
     def __init__(self) -> None:
-        self._base = TRONGRID_MAINNET if settings.TRON_NETWORK == "mainnet" else TRONGRID_SHASTA
-        self._contract = USDT_CONTRACT if settings.TRON_NETWORK == "mainnet" else USDT_CONTRACT_SHASTA
+        self._base = TRONGRID_MAINNET
+        self._contract = USDT_CONTRACT
         self._headers = {"TRON-PRO-API-KEY": settings.TRON_API_KEY} if settings.TRON_API_KEY else {}
 
     async def get_trx_balance(self, address: str) -> Decimal:

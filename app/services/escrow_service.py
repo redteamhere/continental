@@ -56,10 +56,12 @@ class EscrowService:
 
         if cold_addr:
             # Cold wallet mode — buyer sends to admin's fixed address
+            # private_key_encrypted set to "COLD_WALLET" sentinel (no managed key)
             wallet = Wallet(
                 deal_id=deal.id,
                 chain=chain,
                 address=cold_addr,
+                private_key_encrypted="COLD_WALLET",
                 expected_amount=deal.amount,
             )
             self._s.add(wallet)

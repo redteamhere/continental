@@ -280,7 +280,7 @@ async def _finalize_deal_creation(event: Message | CallbackQuery, state: FSMCont
         logger.exception(f"Deal creation failed unexpectedly: {e}")
         await state.clear()
         await send(
-            "❌ <b>Deal creation failed.</b> Please try again or contact support.",
+            f"❌ <b>Deal creation failed.</b>\n\n<code>{type(e).__name__}: {e}</code>",
             reply_markup=main_menu_kb(),
             parse_mode="HTML",
         )

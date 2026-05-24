@@ -54,15 +54,73 @@ class NotificationService:
             except TelegramAPIError as e:
                 logger.warning(f"[Notify] Failed to send to {seller.telegram_id}: {e}")
 
-    async def deal_accepted(self, deal: Deal, buyer: User, seller: User) -> None:
-        await self._send(
-            buyer,
-            f"✅ <b>Deal Accepted!</b>\n\n"
-            f"Deal: <code>{deal.deal_number}</code>\n"
-            f"Seller {seller.display_name} accepted your deal.\n\n"
-            f"Please fund the escrow wallet to proceed.",
-            type="deal_accepted",
-        )
+    async def deal_accepted(
+        self, deal: Deal, buyer: User, seller: User, wallet_address: str = ""
+    ) -> None:
+        network_warnings = {
+            "USDT_TRC20": "⚠️ Send ONLY via <b>TRC20 (TRON)</b> network.\nSending via ERC20 or BEP20 will result in loss of funds.",
+            "USDT_BEP20": "⚠️ Send ONLY via <b>BEP20 (BNB Smart Chain)</b> network.\nSending via TRC20 or ERC20 will result in loss of funds.",
+            "USDT_ERC20": "⚠️ Send ONLY via <b>ERC20 (Ethereum)</b> network.\nSending via TRC20 or BEP20 will result in loss of funds.",
+            "BTC":        "⚠️ Send ONLY to this <b>Bitcoin (BTC)</b> address.\nDo not send any other coin to this address.",
+        }
+        currency_labels = {
+            "USDT_TRC20": "USDT (TRC20 — TRON)",
+            "USDT_BEP20": "USDT (BEP20 — BNB Smart Chain)",
+            "USDT_ERC20": "USDT (ERC20 — Ethereum)",
+            "BTC":        "BTC (Bitcoin)",
+        }
+        warning = network_warnings.get(deal.currency.value, "")
+        label   = currency_labels.get(deal.currency.value, deal.currency.value)
+
+        if wallet_address:
+            text = (
+                f"✅ <b>Deal Accepted!</b>\n\n"
+                f"Deal: <code>{deal.deal_number}</code>\n"
+                f"Seller <b>{seller.display_name}</b> accepted your deal.\n\n"
+                f"💳 <b>Send exactly:</b>\n"
+                f"<code>{deal.amount}</code> <b>{label}</b>\n\n"
+                f"<b>To this address:</b>\n"
+                f"<code>{wallet_address}</code>\n\n"
+                f"📌 <b>Include your Deal ID as memo/reference:</b>\n"
+                f"<code>{deal.deal_number}</code>\n\n"
+                f"{warning}\n\n"
+                f"After sending, the admin will verify and confirm your payment.\n"
+                f"Both you and the seller will be notified once confirmed."
+            )
+        else:
+            text = (
+                f"✅ <b>Deal Accepted!</b>\n\n"
+                f"Deal: <code>{deal.deal_number}</code>\n"
+                f"Seller {seller.display_name} accepted your deal.\n\n"
+                f"Please contact the admin to receive payment instructions."
+            )
+
+        n = Notification(user_id=buyer.id, type="deal_accepted", message=text)
+        self._s.add(n)
+        if self._bot:
+            try:
+                await self._bot.send_message(buyer.telegram_id, text, parse_mode="HTML")
+                # Also send QR code of the wallet address
+                if wallet_address:
+                    import io
+                    import qrcode
+                    from aiogram.types import BufferedInputFile
+                    qr = qrcode.QRCode(version=1, box_size=8, border=4)
+                    qr.add_data(wallet_address)
+                    qr.make(fit=True)
+                    img = qr.make_image(fill_color="black", back_color="white")
+                    buf = io.BytesIO()
+                    img.save(buf, format="PNG")
+                    buf.seek(0)
+                    qr_file = BufferedInputFile(buf.read(), filename="payment_qr.png")
+                    await self._bot.send_photo(
+                        buyer.telegram_id,
+                        qr_file,
+                        caption=f"📷 QR code for <code>{wallet_address}</code>",
+                        parse_mode="HTML",
+                    )
+            except TelegramAPIError as e:
+                logger.warning(f"[Notify] Failed to send to {buyer.telegram_id}: {e}")
 
     async def payment_detected(self, deal: Deal, buyer: User, seller: User, amount) -> None:
         for user in (buyer, seller):

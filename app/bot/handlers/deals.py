@@ -392,6 +392,7 @@ async def accept_deal(callback: CallbackQuery, db_user) -> None:
 
     async with AsyncSessionFactory() as session:
         deal_svc = DealService(session)
+        escrow_svc = EscrowService(session)
         notif_svc = NotificationService(session, callback.bot)
         deal = await deal_svc.get_by_id(deal_id)
 
@@ -403,7 +404,12 @@ async def accept_deal(callback: CallbackQuery, db_user) -> None:
 
         buyer_svc = UserService(session)
         buyer = await buyer_svc.get_by_id(deal.buyer_id)
-        await notif_svc.deal_accepted(deal, buyer, db_user)
+
+        # Fetch wallet address to include in buyer notification
+        wallet = await escrow_svc.get_wallet_for_deal(deal)
+        wallet_address = wallet.address if wallet else ""
+
+        await notif_svc.deal_accepted(deal, buyer, db_user, wallet_address=wallet_address)
         await session.commit()
 
     await callback.message.edit_text(

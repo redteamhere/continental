@@ -27,6 +27,9 @@ from app.services.user_service import UserService
 
 router = Router()
 
+# Keep strong references to background tasks so they aren't garbage-collected
+_background_tasks: set = set()
+
 
 def _is_admin_or_mod(db_user, tg_id: int = 0) -> bool:
     from app.config import settings
@@ -388,18 +391,27 @@ async def confirm_payment(message: Message, db_user) -> None:
 
         notif = NotificationService(session, message.bot)
         await notif.payment_confirmed(deal, buyer, seller)
+
+        # Advance to IN_PROGRESS immediately so the blockchain-monitor scheduler
+        # (which queries for FUNDED deals) does not re-send the notification.
+        deal.status = DealStatus.IN_PROGRESS
+
         await session.commit()
         funded_deal_id = deal.id
 
     import asyncio
     from app.services.group_service import create_and_notify_group
-    asyncio.create_task(create_and_notify_group(funded_deal_id, message.bot))
+    _task = asyncio.create_task(
+        create_and_notify_group(funded_deal_id, message.bot, admin_tg_id=message.from_user.id)
+    )
+    _background_tasks.add(_task)
+    _task.add_done_callback(_background_tasks.discard)
 
     await message.answer(
         f"✅ <b>Payment confirmed</b>\n\n"
-        f"Deal <code>{deal_number}</code> is now <b>FUNDED</b>.\n"
+        f"Deal <code>{deal_number}</code> is now <b>IN PROGRESS</b>.\n"
         f"Buyer and seller have been notified.\n"
-        f"A private deal group is being created.",
+        f"Creating a private deal group…",
         parse_mode="HTML",
     )
 

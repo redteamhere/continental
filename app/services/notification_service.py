@@ -29,6 +29,31 @@ class NotificationService:
             except TelegramAPIError as e:
                 logger.warning(f"[Notify] Failed to send to {user.telegram_id}: {e}")
 
+    # ── Admin notifications ──────────────────────────────────
+
+    async def admin_deal_created(self, deal: Deal, buyer: User, seller: User) -> None:
+        """Notify all configured admins when a new deal is created."""
+        from app.config import settings
+        buyer_line = buyer.display_name + (f" (@{buyer.username})" if buyer.username else "")
+        seller_line = seller.display_name + (f" (@{seller.username})" if seller.username else "")
+        text = (
+            f"📋 <b>New Deal Created</b>\n\n"
+            f"Deal ID: <code>{deal.deal_number}</code>\n"
+            f"Buyer: {buyer_line}\n"
+            f"Seller: {seller_line}\n"
+            f"Amount: <b>{deal.amount} {deal.currency.symbol}</b>\n"
+            f"Currency: {deal.currency.value}\n"
+            f"Description: {deal.description}\n\n"
+            f"Status: ⏳ Awaiting seller acceptance"
+        )
+        if not self._bot:
+            return
+        for admin_id in settings.ADMIN_IDS:
+            try:
+                await self._bot.send_message(admin_id, text, parse_mode="HTML")
+            except TelegramAPIError as e:
+                logger.warning(f"[Notify] Failed to notify admin {admin_id}: {e}")
+
     # ── Deal lifecycle ───────────────────────────────────────
 
     async def deal_created(self, deal: Deal, buyer: User, seller: User) -> None:

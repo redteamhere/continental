@@ -85,6 +85,10 @@ class Settings(BaseSettings):
     # ── Telegram MTProto (for deal group creation via Telethon) ─────────────
     TELEGRAM_API_ID: int = 0       # from https://my.telegram.org/apps
     TELEGRAM_API_HASH: str = ""    # from https://my.telegram.org/apps
+    TELEGRAM_PHONE: str = ""       # account phone number (used when generating session string)
+    # User session string — bots cannot create groups; a real user account is needed.
+    # Generate with: python -c "from telethon.sync import TelegramClient; from telethon.sessions import StringSession; c = TelegramClient(StringSession(), API_ID, API_HASH); c.start(); print(c.session.save())"
+    TELEGRAM_SESSION_STRING: str = ""
 
     # ── Web App (Telegram Mini App) ──────────────────────────
     WEB_APP_URL: str = ""   # e.g. https://yourname.github.io/continental/webapp/pin.html
@@ -103,9 +107,9 @@ class Settings(BaseSettings):
     def confirmations_for(self) -> dict[str, int]:
         return {
             "USDT_TRC20": self.USDT_TRC20_CONFIRMATIONS,
-            "BTC": self.BTC_CONFIRMATIONS,
-            "ETH": self.ETH_CONFIRMATIONS,
-            "LTC": self.LTC_CONFIRMATIONS,
+            "USDT_BEP20": self.USDT_TRC20_CONFIRMATIONS,
+            "USDT_ERC20": self.USDT_TRC20_CONFIRMATIONS,
+            "BTC": 3,
         }
 
 

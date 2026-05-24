@@ -263,6 +263,7 @@ async def _finalize_deal_creation(event: Message | CallbackQuery, state: FSMCont
 
             await audit.deal_created(buyer.id, deal.id, {"deal_number": deal.deal_number})
             await notif_svc.deal_created(deal, buyer, seller)
+            await notif_svc.admin_deal_created(deal, buyer, seller)
             await session.commit()
 
     except RuntimeError as e:

@@ -7,7 +7,6 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from app.bot.handlers.pin_input import build_pin_message
-from app.bot.keyboards.pin_kb import pin_webapp_kb
 from app.bot.states.pin_reset import PinResetStates
 
 router = Router()
@@ -59,7 +58,6 @@ async def pin_forgot_confirm(callback: CallbackQuery, state: FSMContext) -> None
     from app.database import AsyncSessionFactory
     from app.services.user_service import UserService
     from app.services.audit_service import AuditService
-    from app.config import settings as _settings
 
     async with AsyncSessionFactory() as session:
         svc = UserService(session)
@@ -74,25 +72,11 @@ async def pin_forgot_confirm(callback: CallbackQuery, state: FSMContext) -> None
     await state.update_data(pin_buffer="")
     await state.set_state(PinResetStates.waiting_for_new_pin)
 
-    if _settings.WEB_APP_URL:
-        try:
-            await callback.message.edit_text(
-                "✅ <b>PIN cleared.</b>\n\nNow set your new PIN.",
-                parse_mode="HTML",
-            )
-        except Exception:
-            pass
-        await callback.message.answer(
-            "🔑 <b>Set your new PIN</b>\n\nTap the button below.",
-            reply_markup=pin_webapp_kb(_settings.WEB_APP_URL, "set"),
-            parse_mode="HTML",
-        )
-    else:
-        text, kb = build_pin_message(PinResetStates.waiting_for_new_pin.state, 0)
-        try:
-            await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
-        except Exception:
-            await callback.message.answer(text, reply_markup=kb, parse_mode="HTML")
+    text, kb = build_pin_message(PinResetStates.waiting_for_new_pin.state, 0)
+    try:
+        await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+    except Exception:
+        await callback.message.answer(text, reply_markup=kb, parse_mode="HTML")
 
     await callback.answer("PIN reset. Set a new PIN.")
 

@@ -411,6 +411,7 @@ async def accept_deal(callback: CallbackQuery, db_user) -> None:
         wallet_address = wallet.address if wallet else ""
 
         await notif_svc.deal_accepted(deal, buyer, db_user, wallet_address=wallet_address)
+        await notif_svc.admin_deal_accepted(deal, buyer, db_user)
         await session.commit()
 
     await callback.message.edit_text(

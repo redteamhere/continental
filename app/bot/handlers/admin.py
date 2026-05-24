@@ -391,10 +391,9 @@ async def confirm_payment(message: Message, db_user) -> None:
 
         notif = NotificationService(session, message.bot)
         await notif.payment_confirmed(deal, buyer, seller)
-
-        # Advance to IN_PROGRESS immediately so the blockchain-monitor scheduler
-        # (which queries for FUNDED deals) does not re-send the notification.
-        deal.status = DealStatus.IN_PROGRESS
+        # Note: deal stays FUNDED — the seller still needs to deliver.
+        # Duplicate notification is prevented by blockchain_monitor checking
+        # the Notification table for an existing funds_confirmed record.
 
         await session.commit()
         funded_deal_id = deal.id
@@ -409,7 +408,7 @@ async def confirm_payment(message: Message, db_user) -> None:
 
     await message.answer(
         f"✅ <b>Payment confirmed</b>\n\n"
-        f"Deal <code>{deal_number}</code> is now <b>IN PROGRESS</b>.\n"
+        f"Deal <code>{deal_number}</code> is now <b>FUNDED</b>.\n"
         f"Buyer and seller have been notified.\n"
         f"Creating a private deal group…",
         parse_mode="HTML",

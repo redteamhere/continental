@@ -113,8 +113,8 @@ class DealService:
         deal.funded_at = datetime.now(timezone.utc)
 
     async def start_progress(self, deal: Deal) -> None:
-        if deal.status != DealStatus.FUNDED:
-            raise ValueError("Deal must be FUNDED to start progress")
+        if deal.status not in (DealStatus.FUNDED, DealStatus.IN_PROGRESS):
+            raise ValueError(f"Deal must be FUNDED or IN_PROGRESS to mark delivered, got {deal.status.value}")
         deal.status = DealStatus.IN_PROGRESS
 
     async def complete(self, deal: Deal, buyer: User) -> None:

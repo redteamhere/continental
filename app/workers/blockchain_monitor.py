@@ -4,19 +4,16 @@ from __future__ import annotations
 from sqlalchemy import select
 
 from app.database import AsyncSessionFactory
+from app.models.audit import Notification
 from app.models.deal import Deal, DealStatus
 from app.services.notification_service import NotificationService
 from app.services.user_service import UserService
 
 
-# Track which deals we've already notified to avoid double-sending
-_notified_funded: set[int] = set()
-
-
 async def notify_funded_deals(bot=None) -> None:
     """
-    Find deals that became FUNDED since last check and send notifications.
-    Uses an in-memory set — in production use Redis for persistence across restarts.
+    Find FUNDED deals that haven't been notified yet and send payment_confirmed.
+    Uses the Notification DB table for deduplication — persistent across restarts.
     """
     async with AsyncSessionFactory() as session:
         result = await session.execute(
@@ -25,10 +22,16 @@ async def notify_funded_deals(bot=None) -> None:
         funded_deals = result.scalars().all()
 
         for deal in funded_deals:
-            if deal.id in _notified_funded:
-                continue
+            # Check DB: skip if a funds_confirmed notification already exists for this deal
+            existing = await session.execute(
+                select(Notification.id).where(
+                    Notification.type == "funds_confirmed",
+                    Notification.deal_id == deal.id,
+                ).limit(1)
+            )
+            if existing.scalar():
+                continue  # Already notified (by admin confirm or a previous scheduler run)
 
-            _notified_funded.add(deal.id)
             user_svc = UserService(session)
             buyer = await user_svc.get_by_id(deal.buyer_id)
             seller = await user_svc.get_by_id(deal.seller_id)

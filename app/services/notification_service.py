@@ -20,7 +20,12 @@ class NotificationService:
 
     async def _send(self, user: User, text: str, **kwargs) -> None:
         """Send message and persist notification record."""
-        n = Notification(user_id=user.id, type=kwargs.get("type", "info"), message=text)
+        n = Notification(
+            user_id=user.id,
+            type=kwargs.get("type", "info"),
+            message=text,
+            deal_id=kwargs.get("deal_id"),
+        )
         self._s.add(n)
 
         if self._bot:
@@ -188,6 +193,7 @@ class NotificationService:
             f"Amount: {deal.amount} {deal.currency.symbol} is now locked.\n"
             f"Please fulfil your part of the deal.",
             type="funds_confirmed",
+            deal_id=deal.id,
         )
         await self._send(
             buyer,
@@ -196,6 +202,7 @@ class NotificationService:
             f"Your {deal.amount} {deal.currency.symbol} is safely locked.\n"
             f"Release funds once you're satisfied.",
             type="funds_confirmed",
+            deal_id=deal.id,
         )
 
     async def seller_delivered(self, deal: Deal, buyer: User, seller: User) -> None:
@@ -272,3 +279,60 @@ class NotificationService:
                 f"Please complete or contact the other party.",
                 type="deadline_warning",
             )
+
+    # ── Admin action notifications ────────────────────────────
+
+    async def _notify_admins(self, text: str) -> None:
+        """Send a message to every configured admin. Never raises."""
+        from app.config import settings
+        if not self._bot:
+            return
+        for admin_id in settings.ADMIN_IDS:
+            try:
+                await self._bot.send_message(admin_id, text, parse_mode="HTML")
+            except TelegramAPIError as e:
+                logger.warning(f"[Notify] Failed to reach admin {admin_id}: {e}")
+
+    async def admin_deal_completed(self, deal: Deal, buyer: User, seller: User) -> None:
+        buyer_line = buyer.display_name + (f" (@{buyer.username})" if buyer.username else "")
+        seller_line = seller.display_name + (f" (@{seller.username})" if seller.username else "")
+        await self._notify_admins(
+            f"🎉 <b>Deal Completed</b>\n\n"
+            f"Deal ID: <code>{deal.deal_number}</code>\n"
+            f"Buyer: {buyer_line}\n"
+            f"Seller: {seller_line}\n"
+            f"Amount: <b>{deal.amount} {deal.currency.symbol}</b>\n\n"
+            f"Buyer has released funds to the seller."
+        )
+
+    async def admin_deal_cancelled(self, deal: Deal, cancelled_by: User) -> None:
+        await self._notify_admins(
+            f"❌ <b>Deal Cancelled</b>\n\n"
+            f"Deal ID: <code>{deal.deal_number}</code>\n"
+            f"Cancelled by: {cancelled_by.display_name}"
+            + (f" (@{cancelled_by.username})" if cancelled_by.username else "") + "\n"
+            f"Reason: {deal.cancellation_reason or 'No reason provided'}"
+        )
+
+    async def admin_seller_delivered(self, deal: Deal, seller: User, buyer: User) -> None:
+        seller_line = seller.display_name + (f" (@{seller.username})" if seller.username else "")
+        buyer_line = buyer.display_name + (f" (@{buyer.username})" if buyer.username else "")
+        await self._notify_admins(
+            f"📦 <b>Seller Marked as Delivered</b>\n\n"
+            f"Deal ID: <code>{deal.deal_number}</code>\n"
+            f"Seller: {seller_line}\n"
+            f"Buyer: {buyer_line}\n"
+            f"Amount: <b>{deal.amount} {deal.currency.symbol}</b>\n\n"
+            f"Waiting for buyer to release funds."
+        )
+
+    async def admin_dispute_opened(self, deal: Deal, opened_by: User, reason: str) -> None:
+        opener_line = opened_by.display_name + (f" (@{opened_by.username})" if opened_by.username else "")
+        await self._notify_admins(
+            f"⚖️ <b>Dispute Opened</b>\n\n"
+            f"Deal ID: <code>{deal.deal_number}</code>\n"
+            f"Opened by: {opener_line}\n"
+            f"Amount: <b>{deal.amount} {deal.currency.symbol}</b>\n\n"
+            f"<b>Reason:</b>\n{reason}\n\n"
+            f"Use /admin → Disputes to review."
+        )

@@ -20,10 +20,12 @@ from app.bot.keyboards.main_menu import back_kb, deals_list_kb, main_menu_kb
 from app.bot.keyboards.pin_kb import pin_pad_kb, pin_dots, pin_webapp_kb
 from app.bot.handlers.pin_input import build_pin_message
 from app.bot.states.deal_creation import DealCreationStates
+from app.bot.states.dispute import DisputeStates
 from app.config import settings
 from app.security.pin_manager import PinManager
 from app.database import AsyncSessionFactory
 from app.models.deal import Currency, DealStatus
+from app.models.dispute import Dispute
 from app.services.audit_service import AuditService
 from app.services.deal_service import DealService
 from app.services.escrow_service import EscrowService
@@ -517,6 +519,7 @@ async def release_pin_submit(callback: CallbackQuery, state: FSMContext) -> None
 
         seller = await UserService(session).get_by_id(deal.seller_id)
         await notif_svc.deal_completed(deal, user, seller)
+        await notif_svc.admin_deal_completed(deal, user, seller)
         await audit.deal_completed(user.id, deal.id)
         await session.commit()
 
@@ -544,14 +547,15 @@ async def seller_mark_delivered(callback: CallbackQuery, db_user) -> None:
         if not deal or deal.seller_id != db_user.id:
             await callback.answer("Not authorized.", show_alert=True)
             return
-        if deal.status != DealStatus.FUNDED:
-            await callback.answer("Deal is not in funded status.", show_alert=True)
+        if deal.status not in (DealStatus.FUNDED, DealStatus.IN_PROGRESS):
+            await callback.answer("Deal must be funded to mark as delivered.", show_alert=True)
             return
 
         await deal_svc.start_progress(deal)
 
         buyer = await UserService(session).get_by_id(deal.buyer_id)
         await notif_svc.seller_delivered(deal, buyer, db_user)
+        await notif_svc.admin_seller_delivered(deal, db_user, buyer)
         await session.commit()
 
     await callback.message.edit_text(
@@ -597,6 +601,7 @@ async def cancel_deal_confirm(callback: CallbackQuery, db_user) -> None:
         buyer = await UserService(session).get_by_id(deal.buyer_id)
         seller = await UserService(session).get_by_id(deal.seller_id)
         await notif_svc.deal_cancelled(deal, buyer, seller)
+        await notif_svc.admin_deal_cancelled(deal, db_user)
         await audit.deal_cancelled(db_user.id, deal.id, "Cancelled by user")
         await session.commit()
 
@@ -606,6 +611,161 @@ async def cancel_deal_confirm(callback: CallbackQuery, db_user) -> None:
         parse_mode="HTML",
     )
     await callback.answer()
+
+
+# ── Deal chat (show invite link) ────────────────────────────
+
+@router.callback_query(F.data.startswith("deal:chat:"))
+async def deal_chat(callback: CallbackQuery, db_user) -> None:
+    deal_id = int(callback.data.split(":")[2])
+
+    async with AsyncSessionFactory() as session:
+        deal = await DealService(session).get_by_id(deal_id)
+
+        if not deal or db_user.id not in (deal.buyer_id, deal.seller_id):
+            await callback.answer("Not authorized.", show_alert=True)
+            return
+
+        if deal.chat_invite_link:
+            await callback.message.answer(
+                f"💬 <b>Private Deal Chat</b>\n\n"
+                f"Deal: <code>{deal.deal_number}</code>\n\n"
+                f"👉 <a href='{deal.chat_invite_link}'>Join the deal chat</a>",
+                parse_mode="HTML",
+                disable_web_page_preview=False,
+            )
+        else:
+            await callback.answer(
+                "The private group is still being set up. Please try again in a moment.",
+                show_alert=True,
+            )
+            return
+
+    await callback.answer()
+
+
+# ── Check payment status ─────────────────────────────────────
+
+@router.callback_query(F.data.startswith("deal:check_payment:"))
+async def check_payment_status(callback: CallbackQuery, db_user) -> None:
+    deal_id = int(callback.data.split(":")[2])
+
+    async with AsyncSessionFactory() as session:
+        deal = await DealService(session).get_by_id(deal_id)
+        escrow_svc = EscrowService(session)
+
+        if not deal or db_user.id not in (deal.buyer_id, deal.seller_id):
+            await callback.answer("Not authorized.", show_alert=True)
+            return
+
+        wallet = await escrow_svc.get_wallet_for_deal(deal)
+
+        status_labels = {
+            "pending":          "⏳ Pending",
+            "awaiting_payment": "💳 Awaiting Payment",
+            "funded":           "✅ Funded — in escrow",
+            "in_progress":      "🔄 In Progress",
+            "completed":        "🎉 Completed",
+            "cancelled":        "❌ Cancelled",
+            "disputed":         "⚖️ Disputed",
+            "refunded":         "↩️ Refunded",
+        }
+        status_label = status_labels.get(deal.status.value, deal.status.value)
+
+        text = (
+            f"💳 <b>Payment Status</b>\n\n"
+            f"Deal: <code>{deal.deal_number}</code>\n"
+            f"Status: {status_label}\n"
+            f"Amount: {deal.amount} {deal.currency.symbol}\n"
+        )
+        if wallet and deal.status.value == "awaiting_payment":
+            text += (
+                f"\n📬 <b>Send payment to:</b>\n"
+                f"<code>{wallet.address}</code>\n\n"
+                f"📌 Include Deal ID as memo:\n"
+                f"<code>{deal.deal_number}</code>"
+            )
+        elif deal.status.value in ("funded", "in_progress"):
+            text += "\n✅ Payment received and safely locked in escrow."
+
+    await callback.message.answer(text, parse_mode="HTML")
+    await callback.answer()
+
+
+# ── Open dispute ─────────────────────────────────────────────
+
+@router.callback_query(F.data.startswith("deal:dispute:"))
+async def start_dispute(callback: CallbackQuery, state: FSMContext, db_user) -> None:
+    deal_id = int(callback.data.split(":")[2])
+
+    async with AsyncSessionFactory() as session:
+        deal = await DealService(session).get_by_id(deal_id)
+        if not deal or db_user.id not in (deal.buyer_id, deal.seller_id):
+            await callback.answer("Not authorized.", show_alert=True)
+            return
+        if deal.status not in (DealStatus.FUNDED, DealStatus.IN_PROGRESS):
+            await callback.answer("Disputes can only be opened for funded deals.", show_alert=True)
+            return
+
+    await state.update_data(dispute_deal_id=deal_id)
+    await state.set_state(DisputeStates.enter_reason)
+    await callback.message.answer(
+        "⚖️ <b>Open a Dispute</b>\n\n"
+        "Describe the issue clearly:\n"
+        "• What was agreed vs what happened\n"
+        "• Dates, amounts, or any evidence\n\n"
+        "Type your reason below:",
+        parse_mode="HTML",
+    )
+    await callback.answer()
+
+
+@router.message(DisputeStates.enter_reason)
+async def dispute_enter_reason(message: Message, state: FSMContext, db_user) -> None:
+    reason = (message.text or "").strip()
+    if len(reason) < 10:
+        await message.answer("❌ Please provide more detail (at least 10 characters).")
+        return
+
+    data = await state.get_data()
+    deal_id = data.get("dispute_deal_id")
+
+    async with AsyncSessionFactory() as session:
+        deal_svc = DealService(session)
+        notif_svc = NotificationService(session, message.bot)
+
+        deal = await deal_svc.get_by_id(deal_id)
+        if not deal or db_user.id not in (deal.buyer_id, deal.seller_id):
+            await message.answer("Deal not found.")
+            await state.clear()
+            return
+        if deal.status not in (DealStatus.FUNDED, DealStatus.IN_PROGRESS):
+            await message.answer("This deal cannot be disputed in its current state.")
+            await state.clear()
+            return
+
+        buyer = await UserService(session).get_by_id(deal.buyer_id)
+        seller = await UserService(session).get_by_id(deal.seller_id)
+        other_party = seller if db_user.id == deal.buyer_id else buyer
+
+        await deal_svc.open_dispute(deal, db_user, reason)
+
+        dispute = Dispute(deal_id=deal.id, opened_by_id=db_user.id, reason=reason)
+        session.add(dispute)
+
+        await notif_svc.dispute_opened(deal, db_user, other_party)
+        await notif_svc.admin_dispute_opened(deal, db_user, reason)
+        await session.commit()
+
+    await state.clear()
+    await message.answer(
+        f"⚖️ <b>Dispute Opened</b>\n\n"
+        f"Deal: <code>{deal.deal_number}</code>\n\n"
+        f"An admin will review your case and contact both parties shortly.\n"
+        f"Please do not take any further action until resolved.",
+        reply_markup=back_kb("menu:my_deals"),
+        parse_mode="HTML",
+    )
 
 
 # ── Reviews ──────────────────────────────────────────────────

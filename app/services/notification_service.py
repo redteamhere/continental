@@ -186,12 +186,15 @@ class NotificationService:
             )
 
     async def payment_confirmed(self, deal: Deal, buyer: User, seller: User) -> None:
+        from app.bot.keyboards.deal_kb import deal_action_kb
+
         await self._send(
             seller,
             f"💵 <b>Funds Confirmed in Escrow!</b>\n\n"
             f"Deal: <code>{deal.deal_number}</code>\n"
             f"Amount: {deal.amount} {deal.currency.symbol} is now locked.\n"
-            f"Please fulfil your part of the deal.",
+            f"Please fulfil your part of the deal.\n\n"
+            f"Use the buttons below to manage this deal:",
             type="funds_confirmed",
             deal_id=deal.id,
         )
@@ -200,21 +203,48 @@ class NotificationService:
             f"🔒 <b>Escrow Funded</b>\n\n"
             f"Deal: <code>{deal.deal_number}</code>\n"
             f"Your {deal.amount} {deal.currency.symbol} is safely locked.\n"
-            f"Release funds once you're satisfied.",
+            f"Release funds once you're satisfied.\n\n"
+            f"Use the buttons below to manage this deal:",
             type="funds_confirmed",
             deal_id=deal.id,
         )
+        # Send action keyboards so both parties can act immediately
+        if self._bot:
+            for user, uid in ((seller, seller.id), (buyer, buyer.id)):
+                try:
+                    await self._bot.send_message(
+                        user.telegram_id,
+                        f"📋 <b>Deal Actions — {deal.deal_number}</b>",
+                        reply_markup=deal_action_kb(deal, uid),
+                        parse_mode="HTML",
+                    )
+                except TelegramAPIError as e:
+                    logger.warning(f"[Notify] Could not send action kb to {user.telegram_id}: {e}")
 
     async def seller_delivered(self, deal: Deal, buyer: User, seller: User) -> None:
+        from app.bot.keyboards.deal_kb import deal_action_kb
+
         await self._send(
             buyer,
             f"📦 <b>Seller Marked as Delivered!</b>\n\n"
             f"Deal: <code>{deal.deal_number}</code>\n"
             f"{seller.display_name} says the work is done.\n\n"
-            f"✅ If you're satisfied — open the deal and tap <b>Release Funds</b>.\n"
-            f"⚖️ If there's a problem — tap <b>Open Dispute</b>.",
+            f"✅ Release funds if satisfied.\n"
+            f"⚖️ Open a dispute if there's a problem.\n"
+            f"❌ Cancel if you need to.",
             type="seller_delivered",
         )
+        # Send buyer their action buttons immediately
+        if self._bot:
+            try:
+                await self._bot.send_message(
+                    buyer.telegram_id,
+                    f"📋 <b>Deal Actions — {deal.deal_number}</b>",
+                    reply_markup=deal_action_kb(deal, buyer.id),
+                    parse_mode="HTML",
+                )
+            except TelegramAPIError as e:
+                logger.warning(f"[Notify] Could not send action kb to {buyer.telegram_id}: {e}")
 
     async def deal_completed(self, deal: Deal, buyer: User, seller: User) -> None:
         await self._send(

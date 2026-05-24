@@ -60,36 +60,22 @@ def deal_action_kb(deal: Deal, viewer_id: int) -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="❌ Cancel Deal", callback_data=f"deal:cancel:{deal.id}"),
         )
 
-    elif deal.status == DealStatus.FUNDED:
+    elif deal.status in (DealStatus.FUNDED, DealStatus.IN_PROGRESS):
         if is_buyer:
             builder.row(
                 InlineKeyboardButton(text="✅ Release Funds", callback_data=f"deal:release:{deal.id}"),
                 InlineKeyboardButton(text="⚖️ Open Dispute", callback_data=f"deal:dispute:{deal.id}"),
             )
-        if is_seller:
             builder.row(
-                InlineKeyboardButton(text="📦 Mark as Delivered", callback_data=f"deal:delivered:{deal.id}"),
-            )
-            builder.row(
-                InlineKeyboardButton(text="⚖️ Open Dispute", callback_data=f"deal:dispute:{deal.id}"),
-            )
-        if is_buyer or is_seller:
-            builder.row(
-                InlineKeyboardButton(text="💬 Deal Chat", callback_data=f"deal:chat:{deal.id}"),
-            )
-
-    elif deal.status == DealStatus.IN_PROGRESS:
-        if is_buyer:
-            builder.row(
-                InlineKeyboardButton(text="✅ Release Funds", callback_data=f"deal:release:{deal.id}"),
-                InlineKeyboardButton(text="⚖️ Open Dispute", callback_data=f"deal:dispute:{deal.id}"),
+                InlineKeyboardButton(text="❌ Cancel Deal", callback_data=f"deal:cancel:{deal.id}"),
             )
         if is_seller:
             builder.row(
                 InlineKeyboardButton(text="📦 Mark as Delivered", callback_data=f"deal:delivered:{deal.id}"),
+                InlineKeyboardButton(text="⚖️ Open Dispute", callback_data=f"deal:dispute:{deal.id}"),
             )
             builder.row(
-                InlineKeyboardButton(text="⚖️ Open Dispute", callback_data=f"deal:dispute:{deal.id}"),
+                InlineKeyboardButton(text="❌ Cancel Deal", callback_data=f"deal:cancel:{deal.id}"),
             )
         if is_buyer or is_seller:
             builder.row(

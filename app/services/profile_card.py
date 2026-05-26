@@ -39,10 +39,16 @@ CARD_GAP_PX      = 13      # horizontal gap between the two card areas (px, at 8
 CARD_FILL        = (34, 31, 28, 245)   # RGBA  (opaque enough to cover old text)
 
 # ─── Text colours ────────────────────────────────────────────────────────────
-C_HANDLE  = (155, 155, 155, 255)  # @username — matches card's muted style
-C_NAME    = (235, 235, 235, 255)  # bold display name — white
-C_LABEL   = (140, 140, 140, 255)  # "Deposit" / "Депозит" label
+C_HANDLE  = (160, 160, 160, 255)  # @username — matches card's muted style
+C_NAME    = (240, 240, 240, 255)  # bold display name — white
+C_LABEL   = (145, 145, 145, 255)  # "Deposit" / "Депозит" label
 C_AMOUNT  = (210, 175, 50,  255)  # deposit value — gold
+
+# ─── Font sizes ───────────────────────────────────────────────────────────────
+FS_HANDLE = 26    # @username
+FS_NAME   = 40    # bold display name
+FS_LABEL  = 22    # deposit label
+FS_AMOUNT = 50    # deposit value (bold)
 
 
 # ─── Font loader ─────────────────────────────────────────────────────────────
@@ -163,22 +169,22 @@ def generate_profile_card(
     img = Image.alpha_composite(img, cover)
 
     # ── Step 2: draw real user text ────────────────────────────────────
-    draw   = ImageDraw.Draw(img)
-    pad_x  = 26              # text left-padding inside each card
-    line1_y = card_y + int(card_h * 0.18)   # @username / label row
-    line2_y = card_y + int(card_h * 0.50)   # name / amount row
+    draw    = ImageDraw.Draw(img)
+    pad_x   = 28                          # text left-padding inside each card
+    line1_y = card_y + int(card_h * 0.13) # @username / deposit-label row
+    line2_y = card_y + int(card_h * 0.45) # name / amount row
 
     handle = f"@{username}" if username else display_name
 
     # — Left card —
     tx = pad_x
-    draw.text((tx, line1_y), handle,       fill=C_HANDLE, font=_font(20))
-    draw.text((tx, line2_y), display_name, fill=C_NAME,   font=_font(30, bold=True))
+    draw.text((tx, line1_y), handle,       fill=C_HANDLE, font=_font(FS_HANDLE))
+    draw.text((tx, line2_y), display_name, fill=C_NAME,   font=_font(FS_NAME, bold=True))
 
     # — Right card —
     rx = right_x + pad_x
-    draw.text((rx, line1_y), deposit_label, fill=C_LABEL,  font=_font(18))
-    draw.text((rx, line2_y), deposit_str,   fill=C_AMOUNT, font=_font(38, bold=True))
+    draw.text((rx, line1_y), deposit_label, fill=C_LABEL,  font=_font(FS_LABEL))
+    draw.text((rx, line2_y), deposit_str,   fill=C_AMOUNT, font=_font(FS_AMOUNT, bold=True))
 
     # ── Step 3: export ────────────────────────────────────────────────
     buf = BytesIO()

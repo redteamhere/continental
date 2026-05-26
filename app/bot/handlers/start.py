@@ -113,22 +113,12 @@ async def select_language(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
 
 
-# ── Language change for existing users (called from profile) ─────────────────
-
-@router.callback_query(F.data == "profile:language")
-async def change_language_menu(callback: CallbackQuery, db_user) -> None:
-    lang = get_lang(db_user)
-    await callback.message.edit_text(
-        t("choose_language", lang),
-        reply_markup=language_select_kb(),
-        parse_mode="HTML",
-    )
-    await callback.answer()
-
+# ── Language selection for existing users (lang:XX callback, no FSM state) ───
+# NOTE: profile:language handler lives in profile.py (handles photo messages).
 
 @router.callback_query(F.data.startswith("lang:"))
 async def set_language(callback: CallbackQuery, db_user) -> None:
-    """Handle language selection for existing (logged-in) users."""
+    """Save the chosen language and refresh the current view."""
     if not db_user:
         await callback.answer("Please /start first.", show_alert=True)
         return
@@ -141,12 +131,22 @@ async def set_language(callback: CallbackQuery, db_user) -> None:
             user.language_code = new_lang
             await session.commit()
 
-    await callback.message.edit_text(
-        t("language_changed", new_lang),
-        reply_markup=main_menu_kb(new_lang),
-        parse_mode="HTML",
-    )
-    await callback.answer()
+    # Update the in-memory object so subsequent code sees the new language
+    db_user.language_code = new_lang
+
+    # If it's a plain text message (e.g. registration flow) → edit in place
+    try:
+        await callback.message.edit_text(
+            t("language_changed", new_lang),
+            reply_markup=main_menu_kb(new_lang),
+            parse_mode="HTML",
+        )
+        await callback.answer()
+    except Exception:
+        # Came from the profile photo — resend the profile card in the new language
+        from app.bot.handlers.profile import _send_profile_card
+        await _send_profile_card(callback, db_user)
+        await callback.answer(t("language_changed", new_lang))
 
 
 # ── PIN pad submit handlers (registration) ───────────────────────────────────

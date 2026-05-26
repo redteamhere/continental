@@ -1,9 +1,11 @@
 """
 PIL-based profile card image generator for the Continental escrow bot.
 
-Place your banner image at:  assets/banner.jpg  (or .png / .webp)
-The image is displayed at its NATURAL aspect ratio (no cropping).
-Two rounded info cards are overlaid on the bottom of the banner.
+The banner (assets/banner.jpg) already contains the pre-designed dark card
+areas at the bottom.  This module:
+  1. Loads the banner at natural aspect ratio (scaled to 800 px wide)
+  2. Covers the placeholder text in the existing cards with matching fills
+  3. Draws the real user data (@username, name, deposit) on top
 """
 from __future__ import annotations
 
@@ -22,28 +24,29 @@ _BANNER_CANDIDATES = [
     os.path.join(ASSETS_DIR, "banner.webp"),
 ]
 
-# ─── Layout constants ────────────────────────────────────────────────────────
-TARGET_W   = 800    # resize banner to this width; height scales proportionally
-CARD_H     = 145    # height of each info card
-CARD_PAD   = 20     # margin from edges and bottom
-CARD_GAP   = 14     # gap between the two cards
-CARD_SPLIT = 0.57   # fraction of usable width given to the LEFT card
-RADIUS     = 12     # rounded-corner radius
-ACCENT_W   = 4      # width of the green accent bar on the left card
+# ─── Output width ─────────────────────────────────────────────────────────────
+TARGET_W = 800   # image is resized to this width; height scales proportionally
 
-# ─── Colour palette ──────────────────────────────────────────────────────────
-C_CARD_BG  = (28, 26, 24, 215)    # RGBA  dark semi-transparent card fill
-C_HANDLE   = (165, 165, 165, 255) # @username
-C_NAME     = (235, 235, 235, 255) # display name (bold white)
-C_LABEL    = (145, 145, 145, 255) # "Deposit" label
-C_AMOUNT   = (210, 175, 50,  255) # deposit value (gold)
-C_ACCENT   = (68,  190, 90,  255) # green left-card accent bar
-C_VIGNETTE = (0,   0,   0,   255) # bottom vignette fill
+# ─── Card position constants (fractions of final image size) ──────────────────
+# These are calibrated to the Continental banner image.
+# Tweak these if the banner image changes.
+CARD_TOP_FRAC    = 0.845   # card strip starts here (fraction from top)
+CARD_BOT_FRAC    = 0.978   # card strip ends here
+CARD_SPLIT_FRAC  = 0.584   # left/right card boundary (fraction of width)
+CARD_GAP_PX      = 13      # horizontal gap between the two card areas (px, at 800 w)
+
+# Card fill colour — must match the dark card background already in the image
+CARD_FILL        = (34, 31, 28, 245)   # RGBA  (opaque enough to cover old text)
+
+# ─── Text colours ────────────────────────────────────────────────────────────
+C_HANDLE  = (155, 155, 155, 255)  # @username — matches card's muted style
+C_NAME    = (235, 235, 235, 255)  # bold display name — white
+C_LABEL   = (140, 140, 140, 255)  # "Deposit" / "Депозит" label
+C_AMOUNT  = (210, 175, 50,  255)  # deposit value — gold
 
 
 # ─── Font loader ─────────────────────────────────────────────────────────────
 def _font(size: int, bold: bool = False) -> ImageFont.ImageFont:
-    """Load TrueType font; works on Windows (dev) and Linux/Railway (prod)."""
     candidates = (
         [
             "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
@@ -72,7 +75,7 @@ def _font(size: int, bold: bool = False) -> ImageFont.ImageFont:
             except Exception:
                 pass
     try:
-        return ImageFont.load_default(size=size)   # Pillow 10+
+        return ImageFont.load_default(size=size)
     except TypeError:
         return ImageFont.load_default()
 
@@ -80,49 +83,36 @@ def _font(size: int, bold: bool = False) -> ImageFont.ImageFont:
 # ─── Background loader ───────────────────────────────────────────────────────
 def _load_background() -> Image.Image:
     """
-    Load banner at natural aspect ratio scaled to TARGET_W wide.
-    Falls back to a generated dark gradient if no file is found.
+    Load the banner at its natural aspect ratio, scaled to TARGET_W wide.
+    Falls back to a generated dark background if no file is present.
     """
     banner_path = next((p for p in _BANNER_CANDIDATES if os.path.exists(p)), None)
 
     if banner_path:
         img = Image.open(banner_path).convert("RGBA")
-        # Scale width to TARGET_W, keep aspect ratio — NO cropping
         new_h = int(TARGET_W * img.height / img.width)
         return img.resize((TARGET_W, new_h), Image.Resampling.LANCZOS)
 
-    # ── Generated fallback: dark Continental-styled background ─────────
-    W, H = TARGET_W, 980
+    # ── Fallback: generated dark background with full card design ──────
+    W, H = TARGET_W, 978
     bg = Image.new("RGBA", (W, H), (10, 9, 8, 255))
     d  = ImageDraw.Draw(bg)
     for y in range(H):
         luma = int(10 + 10 * y / H)
         d.line([(0, y), (W, y)], fill=(luma, int(luma * 0.88), int(luma * 0.72), 255))
     try:
-        wm_f = _font(96, bold=True)
+        wm_f = _font(92, bold=True)
         d.text((W // 2, H // 2 - 60), "CONTINENTAL",
                fill=(28, 24, 18, 255), font=wm_f, anchor="mm")
     except Exception:
         pass
+    # Draw the two card outlines for the fallback
+    card_y = int(H * CARD_TOP_FRAC)
+    card_b = int(H * CARD_BOT_FRAC)
+    split  = int(W * CARD_SPLIT_FRAC)
+    d.rounded_rectangle([(0, card_y), (split, card_b)],          radius=10, fill=(34, 31, 28, 240))
+    d.rounded_rectangle([(split + CARD_GAP_PX, card_y), (W, card_b)], radius=10, fill=(34, 31, 28, 240))
     return bg
-
-
-# ─── Overlay helpers ─────────────────────────────────────────────────────────
-def _draw_card(draw: ImageDraw.ImageDraw, box: tuple[int, int, int, int]) -> None:
-    """Draw a rounded-rectangle card background."""
-    draw.rounded_rectangle(box, radius=RADIUS, fill=C_CARD_BG)
-
-
-def _bottom_vignette(img: Image.Image, vignette_h: int = 220) -> Image.Image:
-    """Add a dark fade at the very bottom so cards are readable on any photo."""
-    W, H = img.size
-    ov = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    d  = ImageDraw.Draw(ov)
-    for y in range(vignette_h):
-        alpha = int(170 * (y / vignette_h) ** 1.5)  # smooth curve
-        d.line([(0, H - vignette_h + y), (W, H - vignette_h + y)],
-               fill=(0, 0, 0, alpha))
-    return Image.alpha_composite(img, ov)
 
 
 # ─── Main generator ──────────────────────────────────────────────────────────
@@ -134,74 +124,63 @@ def generate_profile_card(
     deposit_label: str = "Deposit",
 ) -> BytesIO:
     """
-    Build and return a JPEG BytesIO of the profile card.
-
-    The banner image is displayed at full natural height (no cropping).
-    Two rounded cards are overlaid at the bottom of the image.
+    Overlay real user data on the pre-designed banner card areas.
 
     Parameters
     ----------
-    username      : Telegram @username (no @) or None
-    display_name  : Full name shown below the handle
-    deposit_str   : Formatted escrow balance, e.g. "$12.50"
+    username      : Telegram @username (no @), or None
+    display_name  : Full name
+    deposit_str   : Formatted escrow balance, e.g. "$0.00"
     role_label    : Localised role string, e.g. "👤 User"
     deposit_label : Localised label, e.g. "Deposit" / "Депозит"
     """
-    img = _load_background()
-    img = _bottom_vignette(img)
+    img    = _load_background()
+    IW, IH = img.size
 
-    IW, IH = img.size   # actual image dimensions after scaling
+    # ── Compute card geometry from image fractions ────────────────────
+    card_y  = int(IH * CARD_TOP_FRAC)
+    card_b  = int(IH * CARD_BOT_FRAC)
+    card_h  = card_b - card_y
+    split_x = int(IW * CARD_SPLIT_FRAC)
+    right_x = split_x + CARD_GAP_PX
 
-    # ── Card geometry ─────────────────────────────────────────────────
-    usable_w  = IW - 2 * CARD_PAD - CARD_GAP
-    left_w    = int(usable_w * CARD_SPLIT)
-    right_w   = usable_w - left_w
+    # ── Step 1: cover existing placeholder text ────────────────────────
+    # Draw the same dark fill as the card background, but slightly inside
+    # the card boundaries so we don't touch the rounded-corner edges.
+    cover = Image.new("RGBA", (IW, IH), (0, 0, 0, 0))
+    cd    = ImageDraw.Draw(cover)
+    inset = 8   # px inset from card edge to avoid edge artefacts
+    # Left card cover
+    cd.rectangle(
+        [(inset, card_y + inset), (split_x - inset, card_b - inset)],
+        fill=CARD_FILL,
+    )
+    # Right card cover
+    cd.rectangle(
+        [(right_x + inset, card_y + inset), (IW - inset, card_b - inset)],
+        fill=CARD_FILL,
+    )
+    img = Image.alpha_composite(img, cover)
 
-    card_y    = IH - CARD_H - CARD_PAD   # top of cards
-
-    left_box  = (CARD_PAD,
-                 card_y,
-                 CARD_PAD + left_w,
-                 IH - CARD_PAD)
-
-    right_x   = CARD_PAD + left_w + CARD_GAP
-    right_box = (right_x,
-                 card_y,
-                 right_x + right_w,
-                 IH - CARD_PAD)
-
-    # ── Draw card backgrounds ─────────────────────────────────────────
-    ov_cards = Image.new("RGBA", (IW, IH), (0, 0, 0, 0))
-    cd = ImageDraw.Draw(ov_cards)
-    _draw_card(cd, left_box)
-    _draw_card(cd, right_box)
-    img = Image.alpha_composite(img, ov_cards)
-
-    # ── Draw green accent bar on left card ───────────────────────────
-    ov_accent = Image.new("RGBA", (IW, IH), (0, 0, 0, 0))
-    ad = ImageDraw.Draw(ov_accent)
-    bar_x1 = CARD_PAD
-    bar_x2 = CARD_PAD + ACCENT_W
-    bar_y1 = card_y + RADIUS
-    bar_y2 = IH - CARD_PAD - RADIUS
-    ad.rectangle([(bar_x1, bar_y1), (bar_x2, bar_y2)], fill=C_ACCENT)
-    img = Image.alpha_composite(img, ov_accent)
-
-    # ── Text on cards ─────────────────────────────────────────────────
-    draw = ImageDraw.Draw(img)
-    tx = CARD_PAD + ACCENT_W + 14     # left card text x (after accent bar)
-    ty = card_y                        # left card top y
+    # ── Step 2: draw real user text ────────────────────────────────────
+    draw   = ImageDraw.Draw(img)
+    pad_x  = 26              # text left-padding inside each card
+    line1_y = card_y + int(card_h * 0.18)   # @username / label row
+    line2_y = card_y + int(card_h * 0.50)   # name / amount row
 
     handle = f"@{username}" if username else display_name
-    draw.text((tx, ty + 18),  handle,       fill=C_HANDLE, font=_font(19))
-    draw.text((tx, ty + 50),  display_name, fill=C_NAME,   font=_font(30, bold=True))
 
-    # Right card text
-    rx = right_x + 18
-    draw.text((rx, card_y + 18), deposit_label, fill=C_LABEL,  font=_font(17))
-    draw.text((rx, card_y + 50), deposit_str,   fill=C_AMOUNT, font=_font(38, bold=True))
+    # — Left card —
+    tx = pad_x
+    draw.text((tx, line1_y), handle,       fill=C_HANDLE, font=_font(20))
+    draw.text((tx, line2_y), display_name, fill=C_NAME,   font=_font(30, bold=True))
 
-    # ── Output ────────────────────────────────────────────────────────
+    # — Right card —
+    rx = right_x + pad_x
+    draw.text((rx, line1_y), deposit_label, fill=C_LABEL,  font=_font(18))
+    draw.text((rx, line2_y), deposit_str,   fill=C_AMOUNT, font=_font(38, bold=True))
+
+    # ── Step 3: export ────────────────────────────────────────────────
     buf = BytesIO()
     img.convert("RGB").save(buf, format="JPEG", quality=92, optimize=True)
     buf.seek(0)

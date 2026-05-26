@@ -72,6 +72,21 @@ STRINGS: dict[str, dict[str, str]] = {
         "referral_your_code":   "Your code",
         "referral_your_link":   "Your link",
 
+        # Profile card caption
+        "profile_status":       "Status",
+        "profile_deposit":      "Deposit",
+        "profile_escrow_bal":   "Escrow balance",
+        "profile_caption": (
+            "🏆 <b>My Profile:</b> @{username}\n\n"
+            "👤 <b>Name</b> [{tg_id}]: {full_name}\n"
+            "🎖 <b>Status:</b> {role}\n"
+            "⭐ <b>Reputation:</b> {reputation}/5.0\n\n"
+            "💰 <b>Escrow balance:</b> {deposit}\n\n"
+            "🛒 <b>Purchases:</b> {purchases}\n"
+            "📦 <b>Sales:</b> {sales}\n"
+            "🔗 <b>Referral code:</b> <code>{referral_code}</code>"
+        ),
+
         # PIN management
         "pin_set_title":        "🔒 <b>Set your PIN</b>\n\nTap the button below to set a 4–8 digit PIN.",
         "pin_change_title":     "🔐 <b>Change PIN</b>\n\nFirst, enter your <b>current</b> PIN to verify it's you.",
@@ -144,6 +159,20 @@ STRINGS: dict[str, dict[str, str]] = {
         "referral_your_code":   "您的推荐码",
         "referral_your_link":   "您的链接",
 
+        "profile_status":       "状态",
+        "profile_deposit":      "押金",
+        "profile_escrow_bal":   "托管余额",
+        "profile_caption": (
+            "🏆 <b>我的资料：</b> @{username}\n\n"
+            "👤 <b>姓名</b> [{tg_id}]: {full_name}\n"
+            "🎖 <b>状态：</b> {role}\n"
+            "⭐ <b>信誉：</b> {reputation}/5.0\n\n"
+            "💰 <b>托管余额：</b> {deposit}\n\n"
+            "🛒 <b>购买：</b> {purchases}\n"
+            "📦 <b>销售：</b> {sales}\n"
+            "🔗 <b>推荐码：</b> <code>{referral_code}</code>"
+        ),
+
         "pin_set_title":        "🔒 <b>设置 PIN 码</b>\n\n点击下方按钮设置 4–8 位数字 PIN 码。",
         "pin_change_title":     "🔐 <b>修改 PIN 码</b>\n\n首先输入您的<b>当前</b> PIN 码进行验证。",
         "pin_verified":         "✅ 验证成功，请设置新 PIN 码。",
@@ -213,6 +242,20 @@ STRINGS: dict[str, dict[str, str]] = {
         "referral_desc":        "Поделитесь ссылкой и получайте <b>{bonus}% бонус</b> с каждой сделки ваших рефералов.",
         "referral_your_code":   "Ваш код",
         "referral_your_link":   "Ваша ссылка",
+
+        "profile_status":       "Статус",
+        "profile_deposit":      "Депозит",
+        "profile_escrow_bal":   "Средства в эскроу",
+        "profile_caption": (
+            "🏆 <b>Мой профиль:</b> @{username}\n\n"
+            "👤 <b>Имя</b> [{tg_id}]: {full_name}\n"
+            "🎖 <b>Статус:</b> {role}\n"
+            "⭐ <b>Рейтинг:</b> {reputation}/5.0\n\n"
+            "💰 <b>Средства в эскроу:</b> {deposit}\n\n"
+            "🛒 <b>Покупок:</b> {purchases}\n"
+            "📦 <b>Продаж:</b> {sales}\n"
+            "🔗 <b>Реферальный код:</b> <code>{referral_code}</code>"
+        ),
 
         "pin_set_title":        "🔒 <b>Установите PIN-код</b>\n\nНажмите кнопку ниже, чтобы задать 4–8-значный PIN.",
         "pin_change_title":     "🔐 <b>Изменить PIN</b>\n\nСначала введите <b>текущий</b> PIN для подтверждения.",
@@ -284,6 +327,20 @@ STRINGS: dict[str, dict[str, str]] = {
         "referral_your_code":   "Seu código",
         "referral_your_link":   "Seu link",
 
+        "profile_status":       "Status",
+        "profile_deposit":      "Depósito",
+        "profile_escrow_bal":   "Saldo em garantia",
+        "profile_caption": (
+            "🏆 <b>Meu Perfil:</b> @{username}\n\n"
+            "👤 <b>Nome</b> [{tg_id}]: {full_name}\n"
+            "🎖 <b>Status:</b> {role}\n"
+            "⭐ <b>Reputação:</b> {reputation}/5.0\n\n"
+            "💰 <b>Saldo em garantia:</b> {deposit}\n\n"
+            "🛒 <b>Compras:</b> {purchases}\n"
+            "📦 <b>Vendas:</b> {sales}\n"
+            "🔗 <b>Código de indicação:</b> <code>{referral_code}</code>"
+        ),
+
         "pin_set_title":        "🔒 <b>Defina seu PIN</b>\n\nToque no botão abaixo para definir um PIN de 4–8 dígitos.",
         "pin_change_title":     "🔐 <b>Alterar PIN</b>\n\nPrimeiro, insira seu PIN <b>atual</b> para verificar.",
         "pin_verified":         "✅ Verificado. Agora defina seu novo PIN.",
@@ -353,6 +410,20 @@ STRINGS: dict[str, dict[str, str]] = {
         "referral_desc":        "Bağlantınızı paylaşın, referanslarınızın her anlaşmasından <b>{bonus}% bonus</b> kazanın.",
         "referral_your_code":   "Kodunuz",
         "referral_your_link":   "Bağlantınız",
+
+        "profile_status":       "Durum",
+        "profile_deposit":      "Depozito",
+        "profile_escrow_bal":   "Emanet bakiyesi",
+        "profile_caption": (
+            "🏆 <b>Profilim:</b> @{username}\n\n"
+            "👤 <b>Ad</b> [{tg_id}]: {full_name}\n"
+            "🎖 <b>Durum:</b> {role}\n"
+            "⭐ <b>İtibar:</b> {reputation}/5.0\n\n"
+            "💰 <b>Emanet bakiyesi:</b> {deposit}\n\n"
+            "🛒 <b>Alımlar:</b> {purchases}\n"
+            "📦 <b>Satışlar:</b> {sales}\n"
+            "🔗 <b>Referans kodu:</b> <code>{referral_code}</code>"
+        ),
 
         "pin_set_title":        "🔒 <b>PIN'inizi ayarlayın</b>\n\n4–8 haneli PIN ayarlamak için aşağıdaki butona dokunun.",
         "pin_change_title":     "🔐 <b>PIN Değiştir</b>\n\nÖnce kimliğinizi doğrulamak için <b>mevcut</b> PIN'inizi girin.",

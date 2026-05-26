@@ -218,11 +218,19 @@ async def reg_pin_confirm(callback: CallbackQuery, state: FSMContext) -> None:
 async def menu_main(callback: CallbackQuery, state: FSMContext, db_user) -> None:
     await state.clear()
     lang = get_lang(db_user)
-    await callback.message.edit_text(
-        "🏠 <b>Main Menu</b>",
-        reply_markup=main_menu_kb(lang),
-        parse_mode="HTML",
-    )
+    menu_text = "🏠 <b>Main Menu</b>"
+    kb = main_menu_kb(lang)
+    # edit_text fails on photo messages — fall back to delete + resend
+    try:
+        await callback.message.edit_text(menu_text, reply_markup=kb, parse_mode="HTML")
+    except Exception:
+        try:
+            await callback.message.delete()
+        except Exception:
+            pass
+        await callback.bot.send_message(
+            callback.from_user.id, menu_text, reply_markup=kb, parse_mode="HTML"
+        )
     await callback.answer()
 
 

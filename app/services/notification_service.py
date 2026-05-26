@@ -152,11 +152,12 @@ class NotificationService:
         if self._bot:
             try:
                 await self._bot.send_message(buyer.telegram_id, text, parse_mode="HTML")
-                # Also send QR code of the wallet address
+                # Send QR code with the "I Have Paid" action button attached
                 if wallet_address:
                     import io
                     import qrcode
                     from aiogram.types import BufferedInputFile
+                    from app.bot.keyboards.deal_kb import payment_detail_kb
                     qr = qrcode.QRCode(version=1, box_size=8, border=4)
                     qr.add_data(wallet_address)
                     qr.make(fit=True)
@@ -170,6 +171,7 @@ class NotificationService:
                         qr_file,
                         caption=f"📷 QR code for <code>{wallet_address}</code>",
                         parse_mode="HTML",
+                        reply_markup=payment_detail_kb(deal.id),
                     )
             except TelegramAPIError as e:
                 logger.warning(f"[Notify] Failed to send to {buyer.telegram_id}: {e}")

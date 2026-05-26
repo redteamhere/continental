@@ -8,8 +8,9 @@ from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, Message
-from sqlalchemy import select
+from aiogram.types import CallbackQuery, InlineKeyboardButton, Message
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+from sqlalchemy import func, select
 
 from app.bot.keyboards.admin_kb import admin_panel_kb, dispute_resolve_kb, user_action_kb
 from app.bot.keyboards.main_menu import back_kb
@@ -18,6 +19,8 @@ from app.config import settings
 from app.database import AsyncSessionFactory
 from app.models.deal import Deal, DealStatus
 from app.models.dispute import Dispute, DisputeStatus, ResolutionType
+from app.models.transaction import Transaction
+from app.models.user import User, UserRole
 from app.models.wallet import Wallet
 from app.services.audit_service import AuditService
 from app.services.deal_service import DealService
@@ -29,6 +32,14 @@ router = Router()
 
 # Keep strong references to background tasks so they aren't garbage-collected
 _background_tasks: set = set()
+
+_USERS_PER_PAGE = 10
+
+
+# ── Admin lookup FSM states ───────────────────────────────────
+class AdminLookupStates(StatesGroup):
+    waiting_for_username = State()
+    waiting_for_deal_number = State()
 
 
 def _is_admin_or_mod(db_user, tg_id: int = 0) -> bool:
@@ -50,6 +61,21 @@ async def admin_panel(message: Message, db_user) -> None:
     )
 
 
+@router.callback_query(F.data == "admin:panel")
+async def admin_panel_cb(callback: CallbackQuery, state: FSMContext, db_user) -> None:
+    """Back button target for all admin sub-pages."""
+    if not _is_admin_or_mod(db_user, callback.from_user.id):
+        await callback.answer("Not authorized.", show_alert=True)
+        return
+    await state.clear()
+    await callback.message.edit_text(
+        "👑 <b>Admin Panel</b>",
+        reply_markup=admin_panel_kb(),
+        parse_mode="HTML",
+    )
+    await callback.answer()
+
+
 @router.callback_query(F.data == "admin:disputes")
 async def list_disputes(callback: CallbackQuery, db_user) -> None:
     if not _is_admin_or_mod(db_user, callback.from_user.id):
@@ -68,7 +94,7 @@ async def list_disputes(callback: CallbackQuery, db_user) -> None:
 
     if not disputes:
         await callback.message.edit_text(
-            "✅ No open disputes.", reply_markup=back_kb("admin_panel")
+            "✅ No open disputes.", reply_markup=back_kb("admin:panel")
         )
         await callback.answer()
         return
@@ -272,34 +298,475 @@ async def admin_confirm_resolution(message: Message, state: FSMContext, db_user)
 
 @router.callback_query(F.data.startswith("admin:ban:"))
 async def ban_user(callback: CallbackQuery, db_user) -> None:
-    if not db_user or not db_user.is_admin:
-        await callback.answer("Admin only.", show_alert=True)
+    if not _is_admin_or_mod(db_user, callback.from_user.id):
+        await callback.answer("Not authorized.", show_alert=True)
         return
     target_id = int(callback.data.split(":")[2])
     async with AsyncSessionFactory() as session:
         svc = UserService(session)
         audit = AuditService(session)
         target = await svc.get_by_id(target_id)
-        if target:
-            await svc.ban(target, "Admin action", db_user)
-            await audit.user_banned(db_user.id, target.id, "Admin action")
-            await session.commit()
-    await callback.answer(f"User {target_id} banned.", show_alert=True)
+        if not target:
+            await callback.answer("User not found.", show_alert=True)
+            return
+        if target.telegram_id in settings.ADMIN_IDS:
+            await callback.answer("Cannot ban an admin.", show_alert=True)
+            return
+        await svc.ban(target, "Admin action", db_user)
+        await audit.user_banned(db_user.id, target.id, "Admin action")
+        await session.commit()
+    await callback.answer(f"✅ User {target_id} banned.", show_alert=True)
+    # Refresh user detail view
+    await _show_user_detail(callback, target_id)
 
 
 @router.callback_query(F.data.startswith("admin:unban:"))
 async def unban_user(callback: CallbackQuery, db_user) -> None:
-    if not db_user or not db_user.is_admin:
-        await callback.answer("Admin only.", show_alert=True)
+    if not _is_admin_or_mod(db_user, callback.from_user.id):
+        await callback.answer("Not authorized.", show_alert=True)
         return
     target_id = int(callback.data.split(":")[2])
     async with AsyncSessionFactory() as session:
         svc = UserService(session)
         target = await svc.get_by_id(target_id)
-        if target:
-            await svc.unban(target)
-            await session.commit()
-    await callback.answer(f"User {target_id} unbanned.", show_alert=True)
+        if not target:
+            await callback.answer("User not found.", show_alert=True)
+            return
+        await svc.unban(target)
+        await session.commit()
+    await callback.answer(f"✅ User {target_id} unbanned.", show_alert=True)
+    await _show_user_detail(callback, target_id)
+
+
+# ── Users list ───────────────────────────────────────────────
+
+@router.callback_query(F.data == "admin:users")
+async def list_users(callback: CallbackQuery, db_user) -> None:
+    if not _is_admin_or_mod(db_user, callback.from_user.id):
+        await callback.answer("Not authorized.", show_alert=True)
+        return
+    await _show_users_page(callback, page=0)
+
+
+@router.callback_query(F.data.startswith("admin:users:page:"))
+async def users_page(callback: CallbackQuery, db_user) -> None:
+    if not _is_admin_or_mod(db_user, callback.from_user.id):
+        await callback.answer("Not authorized.", show_alert=True)
+        return
+    page = int(callback.data.split(":")[3])
+    await _show_users_page(callback, page=page)
+
+
+async def _show_users_page(callback: CallbackQuery, page: int) -> None:
+    offset = page * _USERS_PER_PAGE
+    async with AsyncSessionFactory() as session:
+        total = (await session.execute(select(func.count(User.id)))).scalar_one()
+        result = await session.execute(
+            select(User).order_by(User.created_at.desc()).offset(offset).limit(_USERS_PER_PAGE)
+        )
+        users = result.scalars().all()
+
+    builder = InlineKeyboardBuilder()
+    for u in users:
+        status_icon = "🚫" if u.is_banned else ("👑" if u.role == UserRole.ADMIN else ("🛡️" if u.role == UserRole.MODERATOR else "👤"))
+        name = f"@{u.username}" if u.username else u.first_name
+        builder.row(
+            InlineKeyboardButton(
+                text=f"{status_icon} {name} — ID {u.id}",
+                callback_data=f"admin:user_detail:{u.id}",
+            )
+        )
+
+    nav = []
+    if page > 0:
+        nav.append(InlineKeyboardButton(text="⬅️ Prev", callback_data=f"admin:users:page:{page - 1}"))
+    if offset + _USERS_PER_PAGE < total:
+        nav.append(InlineKeyboardButton(text="Next ➡️", callback_data=f"admin:users:page:{page + 1}"))
+    if nav:
+        builder.row(*nav)
+    builder.row(InlineKeyboardButton(text="⬅️ Back", callback_data="admin:panel"))
+
+    await callback.message.edit_text(
+        f"👥 <b>Users</b> ({total} total) — page {page + 1}",
+        reply_markup=builder.as_markup(),
+        parse_mode="HTML",
+    )
+    await callback.answer()
+
+
+# ── User detail ───────────────────────────────────────────────
+
+@router.callback_query(F.data.startswith("admin:user_detail:"))
+async def user_detail(callback: CallbackQuery, db_user) -> None:
+    if not _is_admin_or_mod(db_user, callback.from_user.id):
+        await callback.answer("Not authorized.", show_alert=True)
+        return
+    target_id = int(callback.data.split(":")[2])
+    await _show_user_detail(callback, target_id)
+
+
+async def _show_user_detail(callback: CallbackQuery, target_id: int) -> None:
+    async with AsyncSessionFactory() as session:
+        target = await UserService(session).get_by_id(target_id)
+        if not target:
+            await callback.answer("User not found.", show_alert=True)
+            return
+        deal_count = (await session.execute(
+            select(func.count(Deal.id)).where(
+                (Deal.buyer_id == target.id) | (Deal.seller_id == target.id)
+            )
+        )).scalar_one()
+
+    status_parts = []
+    if target.is_banned:
+        status_parts.append(f"🚫 <b>BANNED</b> — {target.ban_reason or 'no reason'}")
+    if target.role == UserRole.ADMIN:
+        status_parts.append("👑 Admin")
+    elif target.role == UserRole.MODERATOR:
+        status_parts.append("🛡️ Moderator")
+    else:
+        status_parts.append("👤 User")
+
+    name = f"{target.first_name} {target.last_name or ''}".strip()
+    username = f"@{target.username}" if target.username else "—"
+
+    text = (
+        f"👤 <b>User #{target.id}</b>\n\n"
+        f"Name: {name}\n"
+        f"Username: {username}\n"
+        f"Telegram ID: <code>{target.telegram_id}</code>\n"
+        f"Status: {' | '.join(status_parts)}\n"
+        f"Joined: {target.created_at.strftime('%d %b %Y')}\n\n"
+        f"Deals: <b>{deal_count}</b>\n"
+        f"Reputation: <b>{target.reputation_score:.1f}</b>/5.0\n"
+        f"Referral Code: <code>{target.referral_code}</code>"
+    )
+    await callback.message.edit_text(
+        text,
+        reply_markup=user_action_kb(target.id, target.is_banned),
+        parse_mode="HTML",
+    )
+    await callback.answer()
+
+
+# ── Set / unset moderator ────────────────────────────────────
+
+@router.callback_query(F.data.startswith("admin:set_mod:"))
+async def set_moderator(callback: CallbackQuery, db_user) -> None:
+    if not _is_admin_or_mod(db_user, callback.from_user.id):
+        await callback.answer("Not authorized.", show_alert=True)
+        return
+    target_id = int(callback.data.split(":")[2])
+    async with AsyncSessionFactory() as session:
+        svc = UserService(session)
+        target = await svc.get_by_id(target_id)
+        if not target:
+            await callback.answer("User not found.", show_alert=True)
+            return
+        if target.telegram_id in settings.ADMIN_IDS:
+            await callback.answer("Cannot change admin's role.", show_alert=True)
+            return
+        # Toggle: if already moderator → back to user; if user → promote to moderator
+        if target.role == UserRole.MODERATOR:
+            await svc.set_role(target, UserRole.USER)
+            msg = f"✅ @{target.username or target.first_name} is now a regular User."
+        else:
+            await svc.set_role(target, UserRole.MODERATOR)
+            msg = f"✅ @{target.username or target.first_name} is now a Moderator."
+        await session.commit()
+    await callback.answer(msg, show_alert=True)
+    await _show_user_detail(callback, target_id)
+
+
+# ── User deals ───────────────────────────────────────────────
+
+@router.callback_query(F.data.startswith("admin:user_deals:"))
+async def user_deals(callback: CallbackQuery, db_user) -> None:
+    if not _is_admin_or_mod(db_user, callback.from_user.id):
+        await callback.answer("Not authorized.", show_alert=True)
+        return
+    target_id = int(callback.data.split(":")[2])
+
+    async with AsyncSessionFactory() as session:
+        target = await UserService(session).get_by_id(target_id)
+        if not target:
+            await callback.answer("User not found.", show_alert=True)
+            return
+        result = await session.execute(
+            select(Deal)
+            .where((Deal.buyer_id == target_id) | (Deal.seller_id == target_id))
+            .order_by(Deal.created_at.desc())
+            .limit(20)
+        )
+        deals = result.scalars().all()
+
+    if not deals:
+        await callback.message.edit_text(
+            f"📋 No deals found for user #{target_id}.",
+            reply_markup=back_kb(f"admin:user_detail:{target_id}"),
+        )
+        await callback.answer()
+        return
+
+    builder = InlineKeyboardBuilder()
+    status_icons = {
+        "pending": "🟡", "awaiting_payment": "💳", "funded": "💰",
+        "in_progress": "⚙️", "completed": "✅", "cancelled": "❌",
+        "disputed": "⚖️", "refunded": "↩️",
+    }
+    for d in deals:
+        icon = status_icons.get(d.status.value, "❓")
+        role = "B" if d.buyer_id == target_id else "S"
+        builder.row(
+            InlineKeyboardButton(
+                text=f"{icon} [{role}] {d.deal_number} — {d.amount} {d.currency.symbol}",
+                callback_data=f"deal:view:{d.id}",
+            )
+        )
+    builder.row(InlineKeyboardButton(text="⬅️ Back", callback_data=f"admin:user_detail:{target_id}"))
+
+    name = f"@{target.username}" if target.username else target.first_name
+    await callback.message.edit_text(
+        f"📋 <b>Deals for {name}</b> (last {len(deals)})",
+        reply_markup=builder.as_markup(),
+        parse_mode="HTML",
+    )
+    await callback.answer()
+
+
+# ── Transactions list ────────────────────────────────────────
+
+@router.callback_query(F.data == "admin:transactions")
+async def list_transactions(callback: CallbackQuery, db_user) -> None:
+    if not _is_admin_or_mod(db_user, callback.from_user.id):
+        await callback.answer("Not authorized.", show_alert=True)
+        return
+
+    async with AsyncSessionFactory() as session:
+        result = await session.execute(
+            select(Transaction).order_by(Transaction.detected_at.desc()).limit(20)
+        )
+        txs = result.scalars().all()
+
+    if not txs:
+        await callback.message.edit_text(
+            "💰 No transactions recorded yet.",
+            reply_markup=back_kb("admin:panel"),
+        )
+        await callback.answer()
+        return
+
+    lines = []
+    status_icons = {"pending": "🟡", "confirming": "🔄", "confirmed": "✅", "failed": "❌", "duplicate": "🔁"}
+    for tx in txs:
+        icon = status_icons.get(tx.status.value, "❓")
+        date = tx.detected_at.strftime("%d %b %H:%M")
+        lines.append(
+            f"{icon} <code>{tx.tx_hash[:12]}…</code> | {tx.amount} {tx.currency} | {date}"
+        )
+
+    text = "💰 <b>Recent Transactions</b> (last 20)\n\n" + "\n".join(lines)
+    await callback.message.edit_text(text, reply_markup=back_kb("admin:panel"), parse_mode="HTML")
+    await callback.answer()
+
+
+# ── Lookup user ──────────────────────────────────────────────
+
+@router.callback_query(F.data == "admin:lookup_user")
+async def lookup_user_prompt(callback: CallbackQuery, state: FSMContext, db_user) -> None:
+    if not _is_admin_or_mod(db_user, callback.from_user.id):
+        await callback.answer("Not authorized.", show_alert=True)
+        return
+    await state.set_state(AdminLookupStates.waiting_for_username)
+    await callback.message.edit_text(
+        "🔍 <b>Lookup User</b>\n\nSend the user's <b>@username</b> or <b>Telegram ID</b>:",
+        reply_markup=back_kb("admin:panel"),
+        parse_mode="HTML",
+    )
+    await callback.answer()
+
+
+@router.message(AdminLookupStates.waiting_for_username)
+async def lookup_user_result(message: Message, state: FSMContext, db_user) -> None:
+    if not _is_admin_or_mod(db_user, message.from_user.id):
+        return
+    query = message.text.strip()
+    await state.clear()
+
+    async with AsyncSessionFactory() as session:
+        svc = UserService(session)
+        if query.lstrip("@").isdigit():
+            # Try Telegram ID first, then DB ID
+            tg_id = int(query.lstrip("@"))
+            target = await svc.get_by_telegram_id(tg_id) or await svc.get_by_id(tg_id)
+        else:
+            target = await svc.get_by_username(query.lstrip("@"))
+
+        if not target:
+            await message.answer(
+                f"❌ User <code>{query}</code> not found.",
+                reply_markup=back_kb("admin:panel"),
+                parse_mode="HTML",
+            )
+            return
+
+        deal_count = (await session.execute(
+            select(func.count(Deal.id)).where(
+                (Deal.buyer_id == target.id) | (Deal.seller_id == target.id)
+            )
+        )).scalar_one()
+
+        status_parts = []
+        if target.is_banned:
+            status_parts.append(f"🚫 BANNED — {target.ban_reason or 'no reason'}")
+        if target.role == UserRole.ADMIN:
+            status_parts.append("👑 Admin")
+        elif target.role == UserRole.MODERATOR:
+            status_parts.append("🛡️ Moderator")
+        else:
+            status_parts.append("👤 User")
+
+        name = f"{target.first_name} {target.last_name or ''}".strip()
+        username = f"@{target.username}" if target.username else "—"
+        text = (
+            f"👤 <b>User #{target.id}</b>\n\n"
+            f"Name: {name}\n"
+            f"Username: {username}\n"
+            f"Telegram ID: <code>{target.telegram_id}</code>\n"
+            f"Status: {' | '.join(status_parts)}\n"
+            f"Joined: {target.created_at.strftime('%d %b %Y')}\n\n"
+            f"Deals: <b>{deal_count}</b>\n"
+            f"Reputation: <b>{target.reputation_score:.1f}</b>/5.0\n"
+            f"Referral Code: <code>{target.referral_code}</code>"
+        )
+        await message.answer(
+            text,
+            reply_markup=user_action_kb(target.id, target.is_banned),
+            parse_mode="HTML",
+        )
+
+
+# ── Lookup deal ──────────────────────────────────────────────
+
+@router.callback_query(F.data == "admin:lookup_deal")
+async def lookup_deal_prompt(callback: CallbackQuery, state: FSMContext, db_user) -> None:
+    if not _is_admin_or_mod(db_user, callback.from_user.id):
+        await callback.answer("Not authorized.", show_alert=True)
+        return
+    await state.set_state(AdminLookupStates.waiting_for_deal_number)
+    await callback.message.edit_text(
+        "🔍 <b>Lookup Deal</b>\n\nSend the deal number (e.g. <code>ESC-A1B2C3</code>):",
+        reply_markup=back_kb("admin:panel"),
+        parse_mode="HTML",
+    )
+    await callback.answer()
+
+
+@router.message(AdminLookupStates.waiting_for_deal_number)
+async def lookup_deal_result(message: Message, state: FSMContext, db_user) -> None:
+    if not _is_admin_or_mod(db_user, message.from_user.id):
+        return
+    deal_number = message.text.strip().upper()
+    await state.clear()
+
+    async with AsyncSessionFactory() as session:
+        result = await session.execute(
+            select(Deal).where(Deal.deal_number == deal_number)
+        )
+        deal = result.scalar_one_or_none()
+        if not deal:
+            await message.answer(
+                f"❌ Deal <code>{deal_number}</code> not found.",
+                reply_markup=back_kb("admin:panel"),
+                parse_mode="HTML",
+            )
+            return
+
+        svc = UserService(session)
+        buyer = await svc.get_by_id(deal.buyer_id)
+        seller = await svc.get_by_id(deal.seller_id)
+
+        buyer_name = f"@{buyer.username}" if buyer and buyer.username else (buyer.first_name if buyer else "Unknown")
+        seller_name = f"@{seller.username}" if seller and seller.username else (seller.first_name if seller else "Unknown")
+        created = deal.created_at.strftime("%d %b %Y %H:%M UTC")
+        funded = deal.funded_at.strftime("%d %b %Y %H:%M UTC") if deal.funded_at else "—"
+
+        text = (
+            f"📋 <b>Deal {deal.deal_number}</b>\n\n"
+            f"Status: <b>{deal.status.value}</b>\n"
+            f"Amount: <b>{deal.amount} {deal.currency.symbol}</b>\n\n"
+            f"Buyer: {buyer_name}\n"
+            f"Seller: {seller_name}\n"
+            f"Description: {deal.description or '—'}\n\n"
+            f"Created: {created}\n"
+            f"Funded: {funded}"
+        )
+
+        builder = InlineKeyboardBuilder()
+        if deal.status == DealStatus.AWAITING_PAYMENT:
+            builder.row(InlineKeyboardButton(
+                text="✅ Confirm Payment",
+                callback_data=f"admin:confirm_deal:{deal.id}",
+            ))
+        builder.row(InlineKeyboardButton(text="⬅️ Back", callback_data="admin:panel"))
+
+        await message.answer(text, reply_markup=builder.as_markup(), parse_mode="HTML")
+
+
+# ── Quick confirm payment from deal lookup ────────────────────
+
+@router.callback_query(F.data.startswith("admin:confirm_deal:"))
+async def confirm_deal_cb(callback: CallbackQuery, db_user) -> None:
+    if not _is_admin_or_mod(db_user, callback.from_user.id):
+        await callback.answer("Not authorized.", show_alert=True)
+        return
+    deal_id = int(callback.data.split(":")[2])
+
+    async with AsyncSessionFactory() as session:
+        result = await session.execute(select(Deal).where(Deal.id == deal_id))
+        deal = result.scalar_one_or_none()
+        if not deal or deal.status != DealStatus.AWAITING_PAYMENT:
+            await callback.answer("Deal not found or wrong status.", show_alert=True)
+            return
+
+        deal.status = DealStatus.FUNDED
+        deal.funded_at = datetime.now(timezone.utc)
+
+        if deal.escrow_wallet_id:
+            wallet_result = await session.execute(
+                select(Wallet).where(Wallet.id == deal.escrow_wallet_id)
+            )
+            wallet = wallet_result.scalar_one_or_none()
+            if wallet:
+                wallet.confirmed_balance = deal.amount
+
+        svc = UserService(session)
+        buyer = await svc.get_by_id(deal.buyer_id)
+        seller = await svc.get_by_id(deal.seller_id)
+
+        notif = NotificationService(session, callback.bot)
+        await notif.payment_confirmed(deal, buyer, seller)
+        await session.commit()
+        funded_deal_id = deal.id
+        deal_number = deal.deal_number
+
+    import asyncio
+    from app.services.group_service import create_and_notify_group
+    _task = asyncio.create_task(
+        create_and_notify_group(funded_deal_id, callback.bot, admin_tg_id=callback.from_user.id)
+    )
+    _background_tasks.add(_task)
+    _task.add_done_callback(_background_tasks.discard)
+
+    await callback.message.edit_text(
+        f"✅ <b>Payment confirmed</b>\n\n"
+        f"Deal <code>{deal_number}</code> is now <b>FUNDED</b>.\n"
+        f"Buyer and seller have been notified.\n"
+        f"A private deal group is being created…",
+        reply_markup=back_kb("admin:panel"),
+        parse_mode="HTML",
+    )
+    await callback.answer("Payment confirmed!", show_alert=True)
 
 
 @router.callback_query(F.data == "admin:stats")

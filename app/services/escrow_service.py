@@ -36,7 +36,15 @@ def _cold_wallet_address(currency: Currency) -> str:
         "USDT_TRC20": settings.COLD_WALLET_USDT_TRC20,
         "USDT_BEP20": settings.COLD_WALLET_USDT_BEP20,
         "USDT_ERC20": settings.COLD_WALLET_USDT_ERC20,
+        "USDT_TON":   settings.COLD_WALLET_USDT_TON,
         "BTC":        settings.COLD_WALLET_BTC,
+        "ETH":        settings.COLD_WALLET_ETH,
+        "BNB":        settings.COLD_WALLET_BNB,
+        "LTC":        settings.COLD_WALLET_LTC,
+        "DOGE":       settings.COLD_WALLET_DOGE,
+        "TRX":        settings.COLD_WALLET_TRX,
+        "TON":        settings.COLD_WALLET_TON,
+        "FTM":        settings.COLD_WALLET_FTM,
     }.get(currency.value, "")
 
 

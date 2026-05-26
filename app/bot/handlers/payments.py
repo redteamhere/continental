@@ -50,13 +50,29 @@ async def show_payment_details(callback: CallbackQuery, db_user) -> None:
         "USDT_TRC20": "USDT (TRC20 — TRON network)",
         "USDT_BEP20": "USDT (BEP20 — BNB Smart Chain)",
         "USDT_ERC20": "USDT (ERC20 — Ethereum network)",
+        "USDT_TON":   "USDT (TON network)",
         "BTC":        "Bitcoin (BTC)",
+        "ETH":        "Ethereum (ETH)",
+        "BNB":        "BNB (BEP20 — BNB Smart Chain)",
+        "LTC":        "Litecoin (LTC)",
+        "DOGE":       "Dogecoin (DOGE)",
+        "TRX":        "TRON (TRX)",
+        "TON":        "Toncoin (TON)",
+        "FTM":        "Fantom (FTM)",
     }
     network_warnings = {
         "USDT_TRC20": "⚠️ Send ONLY via <b>TRC20 (TRON)</b> network.\nSending via ERC20 or BEP20 will result in loss of funds.",
         "USDT_BEP20": "⚠️ Send ONLY via <b>BEP20 (BNB Smart Chain)</b> network.\nSending via TRC20 or ERC20 will result in loss of funds.",
         "USDT_ERC20": "⚠️ Send ONLY via <b>ERC20 (Ethereum)</b> network.\nSending via TRC20 or BEP20 will result in loss of funds.",
+        "USDT_TON":   "⚠️ Send ONLY via <b>TON</b> network.\nSending via any other network will result in loss of funds.",
         "BTC":        "⚠️ Send ONLY to this <b>Bitcoin (BTC)</b> address.\nDo not send any other coin to this address.",
+        "ETH":        "⚠️ Send ONLY <b>ETH</b> on the <b>Ethereum mainnet</b>.\nDo not send ERC20 tokens or use Layer-2 networks.",
+        "BNB":        "⚠️ Send ONLY via <b>BEP20 (BNB Smart Chain)</b>.\nDo not send via BEP2 (Binance Chain).",
+        "LTC":        "⚠️ Send ONLY <b>Litecoin (LTC)</b> to this address.\nDo not send BTC or any other coin.",
+        "DOGE":       "⚠️ Send ONLY <b>Dogecoin (DOGE)</b> to this address.",
+        "TRX":        "⚠️ Send ONLY <b>TRX</b> on the <b>TRON</b> network.",
+        "TON":        "⚠️ Send ONLY <b>Toncoin (TON)</b> to this address.",
+        "FTM":        "⚠️ Send ONLY <b>FTM</b> on the <b>Fantom Opera</b> network.",
     }
 
     label = currency_labels.get(deal.currency.value, deal.currency.value)

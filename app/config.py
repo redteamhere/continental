@@ -57,11 +57,19 @@ class Settings(BaseSettings):
     MAX_DEAL_AMOUNT_USD: float = 100_000.0
 
     # ── Admin cold wallets ───────────────────────────────────
-    # Set in Railway. Buyer sends here; admin confirms via /confirm_payment DEAL-XXXXX
+    # Set in Railway Variables. Buyer sends here; admin confirms via /confirm_payment DEAL-XXXXX
     COLD_WALLET_USDT_TRC20: str = ""
     COLD_WALLET_USDT_BEP20: str = ""
     COLD_WALLET_USDT_ERC20: str = ""
+    COLD_WALLET_USDT_TON:   str = ""
     COLD_WALLET_BTC:        str = ""
+    COLD_WALLET_ETH:        str = ""
+    COLD_WALLET_BNB:        str = ""
+    COLD_WALLET_LTC:        str = ""
+    COLD_WALLET_DOGE:       str = ""
+    COLD_WALLET_TRX:        str = ""
+    COLD_WALLET_TON:        str = ""
+    COLD_WALLET_FTM:        str = ""
 
     # ── Tron / USDT TRC20 ────────────────────────────────────
     TRON_API_KEY: str = ""
@@ -109,7 +117,15 @@ class Settings(BaseSettings):
             "USDT_TRC20": self.USDT_TRC20_CONFIRMATIONS,
             "USDT_BEP20": self.USDT_TRC20_CONFIRMATIONS,
             "USDT_ERC20": self.USDT_TRC20_CONFIRMATIONS,
-            "BTC": 3,
+            "USDT_TON":   1,
+            "BTC":        3,
+            "ETH":        12,
+            "BNB":        self.USDT_TRC20_CONFIRMATIONS,
+            "LTC":        6,
+            "DOGE":       6,
+            "TRX":        self.USDT_TRC20_CONFIRMATIONS,
+            "TON":        1,
+            "FTM":        10,
         }
 
 

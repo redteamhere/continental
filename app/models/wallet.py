@@ -22,11 +22,14 @@ from app.database import Base
 
 
 class Chain(str, enum.Enum):
-    TRON = "TRON"
+    TRON     = "TRON"
     ETHEREUM = "ETHEREUM"
-    BSC = "BSC"
-    BITCOIN = "BITCOIN"
+    BSC      = "BSC"
+    BITCOIN  = "BITCOIN"
     LITECOIN = "LITECOIN"
+    DOGECOIN = "DOGECOIN"
+    FANTOM   = "FANTOM"
+    TON      = "TON"
 
 
 class Wallet(Base):

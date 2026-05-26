@@ -37,7 +37,15 @@ class Currency(str, enum.Enum):
     USDT_TRC20 = "USDT_TRC20"
     USDT_BEP20 = "USDT_BEP20"
     USDT_ERC20 = "USDT_ERC20"
+    USDT_TON   = "USDT_TON"
     BTC        = "BTC"
+    ETH        = "ETH"
+    BNB        = "BNB"
+    LTC        = "LTC"
+    DOGE       = "DOGE"
+    TRX        = "TRX"
+    TON        = "TON"
+    FTM        = "FTM"
 
     @property
     def chain(self) -> str:
@@ -45,7 +53,15 @@ class Currency(str, enum.Enum):
             "USDT_TRC20": "TRON",
             "USDT_BEP20": "BSC",
             "USDT_ERC20": "ETHEREUM",
+            "USDT_TON":   "TON",
             "BTC":        "BITCOIN",
+            "ETH":        "ETHEREUM",
+            "BNB":        "BSC",
+            "LTC":        "LITECOIN",
+            "DOGE":       "DOGECOIN",
+            "TRX":        "TRON",
+            "TON":        "TON",
+            "FTM":        "FANTOM",
         }[self.value]
 
     @property
@@ -54,7 +70,15 @@ class Currency(str, enum.Enum):
             "USDT_TRC20": "USDT",
             "USDT_BEP20": "USDT",
             "USDT_ERC20": "USDT",
+            "USDT_TON":   "USDT",
             "BTC":        "BTC",
+            "ETH":        "ETH",
+            "BNB":        "BNB",
+            "LTC":        "LTC",
+            "DOGE":       "DOGE",
+            "TRX":        "TRX",
+            "TON":        "TON",
+            "FTM":        "FTM",
         }[self.value]
 
 

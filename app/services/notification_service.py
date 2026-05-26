@@ -174,6 +174,47 @@ class NotificationService:
             except TelegramAPIError as e:
                 logger.warning(f"[Notify] Failed to send to {buyer.telegram_id}: {e}")
 
+    async def buyer_payment_claimed(self, deal: Deal, buyer: User, seller: User) -> None:
+        """Buyer pressed 'I Have Paid' — notify seller and all admins to verify."""
+        from app.config import settings
+        buyer_line  = buyer.display_name  + (f" (@{buyer.username})"  if buyer.username  else "")
+        seller_line = seller.display_name + (f" (@{seller.username})" if seller.username else "")
+
+        # ── Notify seller ──────────────────────────────────────────────
+        await self._send(
+            seller,
+            f"💳 <b>Buyer Claims Payment Sent</b>\n\n"
+            f"Deal: <code>{deal.deal_number}</code>\n"
+            f"Buyer {buyer_line} says they have sent:\n"
+            f"<b>{deal.amount} {deal.currency.symbol}</b>\n\n"
+            f"Waiting for the admin to verify the transaction on-chain.\n"
+            f"You will be notified once payment is confirmed.",
+            type="payment_claimed",
+            deal_id=deal.id,
+        )
+
+        # ── Notify admins ──────────────────────────────────────────────
+        if not self._bot:
+            return
+        from app.services.escrow_service import _cold_wallet_address
+        wallet_addr = _cold_wallet_address(deal.currency) or "(HD wallet)"
+        admin_text = (
+            f"💰 <b>Buyer Claims Payment Sent — Action Required</b>\n\n"
+            f"Deal ID: <code>{deal.deal_number}</code>\n"
+            f"Buyer: {buyer_line}\n"
+            f"Seller: {seller_line}\n"
+            f"Amount: <b>{deal.amount} {deal.currency.symbol}</b>\n"
+            f"Network: {deal.currency.chain}\n"
+            f"Wallet: <code>{wallet_addr}</code>\n\n"
+            f"Please verify the transaction on-chain, then confirm with:\n"
+            f"<code>/confirm_payment {deal.deal_number}</code>"
+        )
+        for admin_id in settings.ADMIN_IDS:
+            try:
+                await self._bot.send_message(admin_id, admin_text, parse_mode="HTML")
+            except TelegramAPIError as e:
+                logger.warning(f"[Notify] Failed to reach admin {admin_id}: {e}")
+
     async def payment_detected(self, deal: Deal, buyer: User, seller: User, amount) -> None:
         for user in (buyer, seller):
             await self._send(

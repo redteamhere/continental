@@ -10,8 +10,10 @@ from aiogram.types import BufferedInputFile, CallbackQuery
 from app.bot.keyboards.deal_kb import payment_detail_kb
 from app.bot.keyboards.main_menu import back_kb
 from app.database import AsyncSessionFactory
+from app.models.deal import DealStatus
 from app.services.deal_service import DealService
 from app.services.escrow_service import EscrowService
+from app.services.notification_service import NotificationService
 from app.services.user_service import UserService
 
 router = Router()
@@ -133,7 +135,6 @@ async def check_payment_status(callback: CallbackQuery, db_user) -> None:
 
         wallet = await escrow_svc.get_wallet_for_deal(deal)
 
-    from app.models.deal import DealStatus
     status_text = {
         DealStatus.AWAITING_PAYMENT: "⏳ No payment detected yet.",
         DealStatus.FUNDED: f"✅ Payment confirmed! {wallet.confirmed_balance if wallet else ''} received.",
@@ -142,3 +143,50 @@ async def check_payment_status(callback: CallbackQuery, db_user) -> None:
     }.get(deal.status, f"Status: {deal.status.value}")
 
     await callback.answer(status_text, show_alert=True)
+
+
+# ── Buyer: "I Have Paid" ─────────────────────────────────────────────────────
+
+@router.callback_query(F.data.startswith("deal:i_paid:"))
+async def buyer_i_paid(callback: CallbackQuery, db_user) -> None:
+    deal_id = int(callback.data.split(":")[2])
+
+    async with AsyncSessionFactory() as session:
+        deal_svc  = DealService(session)
+        notif_svc = NotificationService(session, callback.bot)
+        deal = await deal_svc.get_by_id(deal_id)
+
+        if not deal or deal.buyer_id != db_user.id:
+            await callback.answer("Not authorized.", show_alert=True)
+            return
+        if deal.status != DealStatus.AWAITING_PAYMENT:
+            await callback.answer(
+                "This deal is not awaiting payment." if deal.status != DealStatus.FUNDED
+                else "Payment already confirmed!",
+                show_alert=True,
+            )
+            return
+
+        seller = await UserService(session).get_by_id(deal.seller_id)
+        await notif_svc.buyer_payment_claimed(deal, db_user, seller)
+        await session.commit()
+
+    # Replace the keyboard — swap "I Have Paid" for a disabled "waiting" label
+    try:
+        await callback.message.edit_reply_markup(
+            reply_markup=payment_detail_kb(deal_id, paid_notified=True)
+        )
+    except Exception:
+        pass
+
+    await callback.answer(
+        "✅ Admin and seller have been notified.\nPlease wait for confirmation.",
+        show_alert=True,
+    )
+
+
+# ── No-op button (disabled state placeholder) ────────────────────────────────
+
+@router.callback_query(F.data == "noop")
+async def noop(callback: CallbackQuery) -> None:
+    await callback.answer()

@@ -126,12 +126,22 @@ def buyer_deal_funded_kb(deal: Deal) -> InlineKeyboardMarkup:
     ])
 
 
-def payment_detail_kb(deal_id: int) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔄 Check Payment Status", callback_data=f"deal:check_payment:{deal_id}")],
-        [InlineKeyboardButton(text="❌ Cancel Deal", callback_data=f"deal:cancel:{deal_id}")],
-        [InlineKeyboardButton(text="⬅️ Back", callback_data=f"deal:view:{deal_id}")],
-    ])
+def payment_detail_kb(deal_id: int, paid_notified: bool = False) -> InlineKeyboardMarkup:
+    rows = []
+    if not paid_notified:
+        rows.append([InlineKeyboardButton(
+            text="✅ I Have Paid",
+            callback_data=f"deal:i_paid:{deal_id}",
+        )])
+    else:
+        rows.append([InlineKeyboardButton(
+            text="⏳ Waiting for admin confirmation…",
+            callback_data="noop",
+        )])
+    rows.append([InlineKeyboardButton(text="🔄 Check Payment Status", callback_data=f"deal:check_payment:{deal_id}")])
+    rows.append([InlineKeyboardButton(text="❌ Cancel Deal",           callback_data=f"deal:cancel:{deal_id}")])
+    rows.append([InlineKeyboardButton(text="⬅️ Back",                  callback_data=f"deal:view:{deal_id}")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def review_stars_kb(deal_id: int) -> InlineKeyboardMarkup:

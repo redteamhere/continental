@@ -283,7 +283,7 @@ async def admin_confirm_resolution(message: Message, state: FSMContext, db_user)
             "no_action": "No action taken",
         }.get(resolution_type_str, resolution_type_str)
 
-        await notif_svc.dispute_resolved(deal, buyer, seller, resolution_label)
+        await notif_svc.dispute_resolved(deal, buyer, seller, resolution_label, notes=notes)
         await audit.dispute_resolved(db_user.id, dispute.id, resolution_label)
         await session.commit()
 

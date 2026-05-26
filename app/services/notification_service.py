@@ -341,16 +341,53 @@ class NotificationService:
         )
 
     async def dispute_resolved(
-        self, deal: Deal, buyer: User, seller: User, resolution: str
+        self,
+        deal: Deal,
+        buyer: User,
+        seller: User,
+        resolution: str,
+        notes: str = "",
     ) -> None:
-        for user in (buyer, seller):
-            await self._send(
-                user,
-                f"⚖️ <b>Dispute Resolved</b>\n\n"
-                f"Deal <code>{deal.deal_number}</code>\n"
-                f"Resolution: {resolution}",
-                type="dispute_resolved",
-            )
+        """
+        Notify both parties of a dispute resolution.
+        Each party gets a tailored outcome line + the admin's explanation.
+        """
+        notes_block = (
+            f"\n\n📝 <b>Admin's decision:</b>\n{notes}"
+            if notes else ""
+        )
+
+        # Determine what happened to each party's funds
+        if "refund" in resolution.lower():
+            buyer_outcome  = "✅ You will receive a <b>full refund</b>."
+            seller_outcome = "❌ The funds have been <b>refunded to the buyer</b>."
+        elif "released to seller" in resolution.lower():
+            buyer_outcome  = "❌ The funds have been <b>released to the seller</b>."
+            seller_outcome = "✅ The funds have been <b>released to you</b>."
+        elif "split" in resolution.lower():
+            buyer_outcome  = f"⚖️ <b>{resolution}</b> — your share will be transferred."
+            seller_outcome = f"⚖️ <b>{resolution}</b> — your share will be transferred."
+        else:
+            buyer_outcome  = f"ℹ️ {resolution}"
+            seller_outcome = f"ℹ️ {resolution}"
+
+        buyer_text = (
+            f"⚖️ <b>Dispute Resolved</b>\n\n"
+            f"Deal: <code>{deal.deal_number}</code>\n"
+            f"Amount: <b>{deal.amount} {deal.currency.symbol}</b>\n\n"
+            f"{buyer_outcome}"
+            f"{notes_block}"
+        )
+        seller_text = (
+            f"⚖️ <b>Dispute Resolved</b>\n\n"
+            f"Deal: <code>{deal.deal_number}</code>\n"
+            f"Amount: <b>{deal.amount} {deal.currency.symbol}</b>\n\n"
+            f"{seller_outcome}"
+            f"{notes_block}"
+        )
+
+        await self._send(buyer,  buyer_text,  type="dispute_resolved", deal_id=deal.id)
+        await self._send(seller, seller_text, type="dispute_resolved", deal_id=deal.id)
 
     async def chat_message(self, recipient: User, sender_role: str, deal_number: str, text: str) -> None:
         await self._send(

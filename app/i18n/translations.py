@@ -77,14 +77,13 @@ STRINGS: dict[str, dict[str, str]] = {
         "profile_deposit":      "Deposit",
         "profile_escrow_bal":   "Escrow balance",
         "profile_caption": (
-            "🏆 <b>My Profile:</b> @{username}\n\n"
+            "⭐ <b>My Profile:</b> @{username}\n"
             "👤 <b>Name</b> [{tg_id}]: {full_name}\n"
             "🎖 <b>Status:</b> {role}\n"
-            "⭐ <b>Reputation:</b> {reputation}/5.0\n\n"
-            "💰 <b>Escrow balance:</b> {deposit}\n\n"
-            "🛒 <b>Purchases:</b> {purchases}\n"
-            "📦 <b>Sales:</b> {sales}\n"
-            "🔗 <b>Referral code:</b> <code>{referral_code}</code>"
+            "🏆 <b>Rating:</b> {reputation}/5.0 ({reviews})\n\n"
+            "💼 <b>Deposit:</b> {deposit}\n\n"
+            "🛒 <b>Purchases:</b> {purchases_count} items, total: {purchases_total}\n"
+            "📦 <b>Sales:</b> {sales_count} items, total: {sales_total}"
         ),
 
         # PIN management
@@ -163,14 +162,13 @@ STRINGS: dict[str, dict[str, str]] = {
         "profile_deposit":      "押金",
         "profile_escrow_bal":   "托管余额",
         "profile_caption": (
-            "🏆 <b>我的资料：</b> @{username}\n\n"
+            "⭐ <b>我的资料：</b> @{username}\n"
             "👤 <b>姓名</b> [{tg_id}]: {full_name}\n"
             "🎖 <b>状态：</b> {role}\n"
-            "⭐ <b>信誉：</b> {reputation}/5.0\n\n"
-            "💰 <b>托管余额：</b> {deposit}\n\n"
-            "🛒 <b>购买：</b> {purchases}\n"
-            "📦 <b>销售：</b> {sales}\n"
-            "🔗 <b>推荐码：</b> <code>{referral_code}</code>"
+            "🏆 <b>评分：</b> {reputation}/5.0 ({reviews})\n\n"
+            "💼 <b>押金：</b> {deposit}\n\n"
+            "🛒 <b>购买：</b> {purchases_count} 笔，总计：{purchases_total}\n"
+            "📦 <b>销售：</b> {sales_count} 笔，总计：{sales_total}"
         ),
 
         "pin_set_title":        "🔒 <b>设置 PIN 码</b>\n\n点击下方按钮设置 4–8 位数字 PIN 码。",
@@ -247,14 +245,13 @@ STRINGS: dict[str, dict[str, str]] = {
         "profile_deposit":      "Депозит",
         "profile_escrow_bal":   "Средства в эскроу",
         "profile_caption": (
-            "🏆 <b>Мой профиль:</b> @{username}\n\n"
+            "⭐ <b>Мой профиль:</b> @{username}\n"
             "👤 <b>Имя</b> [{tg_id}]: {full_name}\n"
             "🎖 <b>Статус:</b> {role}\n"
-            "⭐ <b>Рейтинг:</b> {reputation}/5.0\n\n"
-            "💰 <b>Средства в эскроу:</b> {deposit}\n\n"
-            "🛒 <b>Покупок:</b> {purchases}\n"
-            "📦 <b>Продаж:</b> {sales}\n"
-            "🔗 <b>Реферальный код:</b> <code>{referral_code}</code>"
+            "🏆 <b>Рейтинг:</b> {reputation}/5.0 ({reviews})\n\n"
+            "💼 <b>Депозит:</b> {deposit}\n\n"
+            "🛒 <b>Покупок:</b> {purchases_count} шт, на сумму: {purchases_total}\n"
+            "📦 <b>Продаж:</b> {sales_count} шт, на сумму: {sales_total}"
         ),
 
         "pin_set_title":        "🔒 <b>Установите PIN-код</b>\n\nНажмите кнопку ниже, чтобы задать 4–8-значный PIN.",
@@ -331,14 +328,13 @@ STRINGS: dict[str, dict[str, str]] = {
         "profile_deposit":      "Depósito",
         "profile_escrow_bal":   "Saldo em garantia",
         "profile_caption": (
-            "🏆 <b>Meu Perfil:</b> @{username}\n\n"
+            "⭐ <b>Meu Perfil:</b> @{username}\n"
             "👤 <b>Nome</b> [{tg_id}]: {full_name}\n"
             "🎖 <b>Status:</b> {role}\n"
-            "⭐ <b>Reputação:</b> {reputation}/5.0\n\n"
-            "💰 <b>Saldo em garantia:</b> {deposit}\n\n"
-            "🛒 <b>Compras:</b> {purchases}\n"
-            "📦 <b>Vendas:</b> {sales}\n"
-            "🔗 <b>Código de indicação:</b> <code>{referral_code}</code>"
+            "🏆 <b>Reputação:</b> {reputation}/5.0 ({reviews})\n\n"
+            "💼 <b>Depósito:</b> {deposit}\n\n"
+            "🛒 <b>Compras:</b> {purchases_count} itens, total: {purchases_total}\n"
+            "📦 <b>Vendas:</b> {sales_count} itens, total: {sales_total}"
         ),
 
         "pin_set_title":        "🔒 <b>Defina seu PIN</b>\n\nToque no botão abaixo para definir um PIN de 4–8 dígitos.",
@@ -415,14 +411,13 @@ STRINGS: dict[str, dict[str, str]] = {
         "profile_deposit":      "Depozito",
         "profile_escrow_bal":   "Emanet bakiyesi",
         "profile_caption": (
-            "🏆 <b>Profilim:</b> @{username}\n\n"
+            "⭐ <b>Profilim:</b> @{username}\n"
             "👤 <b>Ad</b> [{tg_id}]: {full_name}\n"
             "🎖 <b>Durum:</b> {role}\n"
-            "⭐ <b>İtibar:</b> {reputation}/5.0\n\n"
-            "💰 <b>Emanet bakiyesi:</b> {deposit}\n\n"
-            "🛒 <b>Alımlar:</b> {purchases}\n"
-            "📦 <b>Satışlar:</b> {sales}\n"
-            "🔗 <b>Referans kodu:</b> <code>{referral_code}</code>"
+            "🏆 <b>İtibar:</b> {reputation}/5.0 ({reviews})\n\n"
+            "💼 <b>Depozito:</b> {deposit}\n\n"
+            "🛒 <b>Alımlar:</b> {purchases_count} adet, toplam: {purchases_total}\n"
+            "📦 <b>Satışlar:</b> {sales_count} adet, toplam: {sales_total}"
         ),
 
         "pin_set_title":        "🔒 <b>PIN'inizi ayarlayın</b>\n\n4–8 haneli PIN ayarlamak için aşağıdaki butona dokunun.",

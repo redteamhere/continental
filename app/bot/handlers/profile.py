@@ -23,6 +23,7 @@ from app.bot.states.pin_reset import PinResetStates
 from app.config import settings as _settings
 from app.database import AsyncSessionFactory
 from app.i18n.translations import get_lang, t
+from app.models.audit import Review
 from app.models.deal import Deal, DealStatus
 from app.models.wallet import Wallet
 from app.services.audit_service import AuditService
@@ -58,10 +59,15 @@ def profile_kb(has_pin: bool, lang: str = "en"):
     return builder.as_markup()
 
 
-async def _get_escrow_balance(user_id: int) -> Decimal:
-    """Sum confirmed_balance of escrow wallets for the user's active funded deals."""
+async def _profile_stats(user_id: int) -> dict:
+    """
+    Fetch all extra stats needed for the profile caption in one DB round-trip.
+    Returns escrow_balance, purchases_count, purchases_total,
+            sales_count, sales_total, reviews_count.
+    """
     async with AsyncSessionFactory() as session:
-        result = await session.execute(
+        # Escrow balance (funded/in-progress deals where user is buyer)
+        escrow = await session.execute(
             select(func.coalesce(func.sum(Wallet.confirmed_balance), Decimal("0")))
             .select_from(join(Wallet, Deal, Deal.escrow_wallet_id == Wallet.id))
             .where(
@@ -69,20 +75,52 @@ async def _get_escrow_balance(user_id: int) -> Decimal:
                 Deal.status.in_([DealStatus.FUNDED, DealStatus.IN_PROGRESS]),
             )
         )
-        return result.scalar_one() or Decimal("0")
+
+        # Purchases (completed deals as buyer)
+        purchases = await session.execute(
+            select(
+                func.count(Deal.id),
+                func.coalesce(func.sum(Deal.amount), Decimal("0")),
+            ).where(Deal.buyer_id == user_id, Deal.status == DealStatus.COMPLETED)
+        )
+
+        # Sales (completed deals as seller)
+        sales = await session.execute(
+            select(
+                func.count(Deal.id),
+                func.coalesce(func.sum(Deal.amount), Decimal("0")),
+            ).where(Deal.seller_id == user_id, Deal.status == DealStatus.COMPLETED)
+        )
+
+        # Review count
+        reviews = await session.execute(
+            select(func.count(Review.id)).where(Review.reviewee_id == user_id)
+        )
+
+        p_count, p_total = purchases.one()
+        s_count, s_total = sales.one()
+
+        return {
+            "escrow_balance":    escrow.scalar_one() or Decimal("0"),
+            "purchases_count":   p_count or 0,
+            "purchases_total":   p_total or Decimal("0"),
+            "sales_count":       s_count or 0,
+            "sales_total":       s_total or Decimal("0"),
+            "reviews_count":     reviews.scalar_one() or 0,
+        }
 
 
 async def _send_profile_card(callback: CallbackQuery, db_user) -> None:
     """Delete the triggering message and send the profile photo card."""
-    lang    = get_lang(db_user)
-    balance = await _get_escrow_balance(db_user.id)
+    lang  = get_lang(db_user)
+    stats = await _profile_stats(db_user.id)
 
-    role_icons = {"admin": "👑", "moderator": "🛡️", "user": "👤"}
+    role_icons  = {"admin": "👑", "moderator": "🛡️", "user": "👤"}
     role_label  = t(f"role_{db_user.role.value}", lang)
     role_icon   = role_icons.get(db_user.role.value, "👤")
     full_name   = f"{db_user.first_name} {db_user.last_name or ''}".strip()
     username    = db_user.username or ""
-    deposit_str = f"${balance:.2f}"
+    deposit_str = f"${stats['escrow_balance']:.2f}"
 
     # Generate card image in a thread pool (PIL is blocking)
     card_bytes = await asyncio.to_thread(
@@ -91,7 +129,7 @@ async def _send_profile_card(callback: CallbackQuery, db_user) -> None:
         full_name,
         deposit_str,
         f"{role_icon} {role_label}",
-        t("profile_deposit", lang),      # localised "Deposit" / "Депозит" etc.
+        t("profile_deposit", lang),
     )
 
     # Build multilingual caption
@@ -103,10 +141,12 @@ async def _send_profile_card(callback: CallbackQuery, db_user) -> None:
         full_name=full_name,
         role=f"{role_icon} {role_label}",
         reputation=f"{db_user.reputation_score:.1f}",
+        reviews=stats["reviews_count"],
         deposit=deposit_str,
-        purchases=db_user.total_purchases,
-        sales=db_user.total_sales,
-        referral_code=db_user.referral_code,
+        purchases_count=stats["purchases_count"],
+        purchases_total=f"${stats['purchases_total']:.2f}",
+        sales_count=stats["sales_count"],
+        sales_total=f"${stats['sales_total']:.2f}",
     )
 
     # Delete old menu message (ignore errors — may already be deleted)

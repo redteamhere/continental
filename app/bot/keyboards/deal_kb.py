@@ -8,27 +8,27 @@ def currency_select_kb() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     # Row 1 — USDT variants
     builder.row(
-        InlineKeyboardButton(text="💵 USDT TRC20", callback_data="currency:USDT_TRC20"),
-        InlineKeyboardButton(text="💵 USDT ERC20", callback_data="currency:USDT_ERC20"),
-        InlineKeyboardButton(text="💵 USDT BEP20", callback_data="currency:USDT_BEP20"),
+        InlineKeyboardButton(text="USDT TRC20", callback_data="currency:USDT_TRC20"),
+        InlineKeyboardButton(text="USDT ERC20", callback_data="currency:USDT_ERC20"),
+        InlineKeyboardButton(text="USDT BEP20", callback_data="currency:USDT_BEP20"),
     )
     # Row 2 — more USDT + big coins
     builder.row(
-        InlineKeyboardButton(text="💵 USDT TON",   callback_data="currency:USDT_TON"),
-        InlineKeyboardButton(text="₿ BTC",          callback_data="currency:BTC"),
-        InlineKeyboardButton(text="Ξ ETH",           callback_data="currency:ETH"),
+        InlineKeyboardButton(text="USDT TON",   callback_data="currency:USDT_TON"),
+        InlineKeyboardButton(text="BTC",        callback_data="currency:BTC"),
+        InlineKeyboardButton(text="ETH",        callback_data="currency:ETH"),
     )
     # Row 3 — alt coins
     builder.row(
-        InlineKeyboardButton(text="🟡 BNB",         callback_data="currency:BNB"),
-        InlineKeyboardButton(text="🪙 LTC",          callback_data="currency:LTC"),
-        InlineKeyboardButton(text="🐕 DOGE",         callback_data="currency:DOGE"),
+        InlineKeyboardButton(text="BNB",        callback_data="currency:BNB"),
+        InlineKeyboardButton(text="LTC",        callback_data="currency:LTC"),
+        InlineKeyboardButton(text="DOGECOIN",   callback_data="currency:DOGE"),
     )
     # Row 4 — more alts
     builder.row(
-        InlineKeyboardButton(text="🔴 TRX",          callback_data="currency:TRX"),
-        InlineKeyboardButton(text="💎 TON",           callback_data="currency:TON"),
-        InlineKeyboardButton(text="👻 FTM",           callback_data="currency:FTM"),
+        InlineKeyboardButton(text="TRX",        callback_data="currency:TRX"),
+        InlineKeyboardButton(text="TON",        callback_data="currency:TON"),
+        InlineKeyboardButton(text="FTM",        callback_data="currency:FTM"),
     )
     builder.row(InlineKeyboardButton(text="❌ Cancel", callback_data="deal:cancel_creation"))
     return builder.as_markup()

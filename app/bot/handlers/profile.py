@@ -91,6 +91,7 @@ async def _send_profile_card(callback: CallbackQuery, db_user) -> None:
         full_name,
         deposit_str,
         f"{role_icon} {role_label}",
+        t("profile_deposit", lang),      # localised "Deposit" / "Депозит" etc.
     )
 
     # Build multilingual caption

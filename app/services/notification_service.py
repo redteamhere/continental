@@ -113,13 +113,29 @@ class NotificationService:
             "USDT_TRC20": "⚠️ Send ONLY via <b>TRC20 (TRON)</b> network.\nSending via ERC20 or BEP20 will result in loss of funds.",
             "USDT_BEP20": "⚠️ Send ONLY via <b>BEP20 (BNB Smart Chain)</b> network.\nSending via TRC20 or ERC20 will result in loss of funds.",
             "USDT_ERC20": "⚠️ Send ONLY via <b>ERC20 (Ethereum)</b> network.\nSending via TRC20 or BEP20 will result in loss of funds.",
+            "USDT_TON":   "⚠️ Send ONLY via <b>TON</b> network.\nSending via any other network will result in loss of funds.",
             "BTC":        "⚠️ Send ONLY to this <b>Bitcoin (BTC)</b> address.\nDo not send any other coin to this address.",
+            "ETH":        "⚠️ Send ONLY <b>ETH</b> on the <b>Ethereum mainnet</b>.\nDo not use Layer-2 networks.",
+            "BNB":        "⚠️ Send ONLY via <b>BEP20 (BNB Smart Chain)</b>.\nDo not send via BEP2.",
+            "LTC":        "⚠️ Send ONLY <b>Litecoin (LTC)</b>.\nDo not send BTC or other coins.",
+            "DOGE":       "⚠️ Send ONLY <b>Dogecoin (DOGE)</b> to this address.",
+            "TRX":        "⚠️ Send ONLY <b>TRX</b> on the <b>TRON</b> network.",
+            "TON":        "⚠️ Send ONLY <b>Toncoin (TON)</b> to this address.",
+            "FTM":        "⚠️ Send ONLY <b>FTM</b> on the <b>Fantom Opera</b> network.",
         }
         currency_labels = {
             "USDT_TRC20": "USDT (TRC20 — TRON)",
             "USDT_BEP20": "USDT (BEP20 — BNB Smart Chain)",
             "USDT_ERC20": "USDT (ERC20 — Ethereum)",
+            "USDT_TON":   "USDT (TON network)",
             "BTC":        "BTC (Bitcoin)",
+            "ETH":        "ETH (Ethereum)",
+            "BNB":        "BNB (BNB Smart Chain)",
+            "LTC":        "LTC (Litecoin)",
+            "DOGE":       "DOGE (Dogecoin)",
+            "TRX":        "TRX (TRON)",
+            "TON":        "TON (Toncoin)",
+            "FTM":        "FTM (Fantom)",
         }
         warning = network_warnings.get(deal.currency.value, "")
         label   = currency_labels.get(deal.currency.value, deal.currency.value)

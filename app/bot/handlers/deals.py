@@ -237,7 +237,6 @@ async def _finalize_deal_creation(event: Message | CallbackQuery, state: FSMCont
         async with AsyncSessionFactory() as session:
             user_svc = UserService(session)
             deal_svc = DealService(session)
-            escrow_svc = EscrowService(session)
             notif_svc = NotificationService(session, bot)
             audit = AuditService(session)
 
@@ -259,26 +258,14 @@ async def _finalize_deal_creation(event: Message | CallbackQuery, state: FSMCont
                 deadline_days=data["deadline_days"],
                 terms=data.get("terms"),
             )
-
-            wallet = await escrow_svc.create_escrow_wallet(deal)
-            await deal_svc.attach_wallet(deal, wallet)
+            # Wallet is created lazily when the seller accepts (not here),
+            # so deal creation never fails due to missing wallet config.
 
             await audit.deal_created(buyer.id, deal.id, {"deal_number": deal.deal_number})
             await notif_svc.deal_created(deal, buyer, seller)
             await notif_svc.admin_deal_created(deal, buyer, seller)
             await session.commit()
 
-    except RuntimeError as e:
-        logger.error(f"Deal creation failed (config error): {e}")
-        await state.clear()
-        await send(
-            f"❌ <b>Deal creation failed</b>\n\n"
-            f"Server configuration error: <code>{e}</code>\n\n"
-            f"Please contact the administrator.",
-            reply_markup=main_menu_kb(),
-            parse_mode="HTML",
-        )
-        return
     except Exception as e:
         logger.exception(f"Deal creation failed unexpectedly: {e}")
         await state.clear()
@@ -405,12 +392,22 @@ async def accept_deal(callback: CallbackQuery, db_user) -> None:
 
         await deal_svc.accept_by_seller(deal, db_user)
 
-        buyer_svc = UserService(session)
-        buyer = await buyer_svc.get_by_id(deal.buyer_id)
+        buyer = await UserService(session).get_by_id(deal.buyer_id)
 
-        # Fetch wallet address to include in buyer notification
-        wallet = await escrow_svc.get_wallet_for_deal(deal)
-        wallet_address = wallet.address if wallet else ""
+        # Create escrow wallet now (lazy — not at deal creation time)
+        wallet_address = ""
+        try:
+            wallet = await escrow_svc.get_wallet_for_deal(deal)
+            if not wallet:
+                wallet = await escrow_svc.create_escrow_wallet(deal)
+                await deal_svc.attach_wallet(deal, wallet)
+            wallet_address = wallet.address or ""
+        except Exception as _wallet_err:
+            from loguru import logger as _log
+            _log.warning(
+                f"[AcceptDeal] Wallet creation failed for {deal.deal_number}: {_wallet_err}. "
+                "Buyer will be told to contact admin."
+            )
 
         await notif_svc.deal_accepted(deal, buyer, db_user, wallet_address=wallet_address)
         await notif_svc.admin_deal_accepted(deal, buyer, db_user)

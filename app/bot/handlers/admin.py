@@ -181,7 +181,11 @@ async def resolve_dispute(callback: CallbackQuery, state: FSMContext, db_user) -
         )
     else:
         await state.set_state(AdminResolveStates.enter_notes)
-        await callback.message.answer("Enter resolution notes (visible to both parties):")
+        await callback.message.answer(
+            "✍️ Write your decision message.\n"
+            "This will be sent word-for-word to <b>both buyer and seller</b>:",
+            parse_mode="HTML",
+        )
     await callback.answer()
 
 
@@ -198,7 +202,10 @@ async def admin_split_percent(message: Message, state: FSMContext) -> None:
     await state.update_data(buyer_split=str(pct), seller_split=str(100 - pct))
     await state.set_state(AdminResolveStates.enter_notes)
     await message.answer(
-        f"Buyer: {pct}%, Seller: {100 - pct}%\n\nEnter resolution notes:"
+        f"Split: Buyer {pct}% / Seller {100 - pct}%\n\n"
+        f"✍️ Now write your decision message.\n"
+        f"This will be sent word-for-word to <b>both buyer and seller</b>:",
+        parse_mode="HTML",
     )
 
 

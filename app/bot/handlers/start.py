@@ -1,4 +1,4 @@
-"""Registration and main menu."""
+"""Registration, language selection, and main menu."""
 from __future__ import annotations
 
 from aiogram import F, Router
@@ -6,34 +6,22 @@ from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery
 
+from app.bot.keyboards.lang_kb import language_select_kb
 from app.bot.keyboards.main_menu import main_menu_kb, back_kb
-from app.bot.keyboards.pin_kb import pin_dots, pin_pad_kb, pin_webapp_kb, pin_remove_kb
+from app.bot.keyboards.pin_kb import pin_webapp_kb
 from app.bot.handlers.pin_input import build_pin_message
 from app.config import settings as _settings
 from app.bot.states.registration import RegistrationStates
 from app.bot.states.pin_reset import PinResetStates
 from app.database import AsyncSessionFactory
+from app.i18n.translations import t, get_lang
 from app.services.user_service import UserService
 from app.services.audit_service import AuditService
 
 router = Router()
 
-WELCOME_NEW = (
-    "👋 <b>Welcome to EscrowBot!</b>\n\n"
-    "I'm a secure escrow service for crypto transactions.\n\n"
-    "🔒 <b>How it works:</b>\n"
-    "1. Buyer creates a deal and funds it\n"
-    "2. Seller completes the work\n"
-    "3. Buyer releases funds — or opens a dispute\n\n"
-    "⚠️ <b>Security reminder:</b> This bot will NEVER ask for your "
-    "private keys or seed phrases."
-)
 
-WELCOME_BACK = (
-    "👋 Welcome back, <b>{name}</b>!\n\n"
-    "What would you like to do today?"
-)
-
+# ── /start ───────────────────────────────────────────────────────────────────
 
 @router.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext) -> None:
@@ -50,6 +38,7 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
         user = await svc.get_by_telegram_id(tg_user.id)
 
         if not user:
+            # ── New user: save referral/tg data, show language picker ──────
             await state.update_data(
                 referral_code=referral_code,
                 tg_first_name=tg_user.first_name,
@@ -58,42 +47,106 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
                 tg_lang=tg_user.language_code or "en",
                 pin_buffer="",
             )
-            await state.set_state(RegistrationStates.waiting_for_pin)
-            await message.answer(WELCOME_NEW, parse_mode="HTML")
-            if _settings.WEB_APP_URL:
-                await message.answer(
-                    "🔐 <b>Create your PIN</b>\n\nTap the button below to set a secure 4–8 digit PIN.",
-                    reply_markup=pin_webapp_kb(_settings.WEB_APP_URL, "set"),
-                    parse_mode="HTML",
-                )
-            else:
-                text, kb = build_pin_message(RegistrationStates.waiting_for_pin.state, 0)
-                await message.answer(text, reply_markup=kb, parse_mode="HTML")
+            await state.set_state(RegistrationStates.select_language)
+            await message.answer(
+                "🌍 <b>Welcome to EscrowBot!</b>\n\nPlease choose your language:\n"
+                "请选择语言 / Выберите язык / Escolha o idioma / Dil seçin",
+                reply_markup=language_select_kb(),
+                parse_mode="HTML",
+            )
+
         elif not user.pin_hash:
-            # Existing user with no PIN — use PinResetStates so webapp routes to set_pin, not create
+            # ── Existing user with no PIN (admin reset) ────────────────────
+            lang = get_lang(user)
             await state.update_data(pin_buffer="")
             await state.set_state(PinResetStates.waiting_for_new_pin)
             if _settings.WEB_APP_URL:
                 await message.answer(
-                    "🔑 <b>PIN Required</b>\n\n"
-                    "Your PIN was reset. Please set a new PIN to continue using the bot.",
+                    t("pin_reset", lang),
                     reply_markup=pin_webapp_kb(_settings.WEB_APP_URL, "set"),
                     parse_mode="HTML",
                 )
             else:
                 text, kb = build_pin_message(PinResetStates.waiting_for_new_pin.state, 0)
                 await message.answer(
-                    "🔑 <b>Your PIN was reset.</b> Please create a new PIN.\n\n"
-                    + text.split("\n\n", 1)[-1],
+                    t("pin_reset", lang) + "\n\n" + text.split("\n\n", 1)[-1],
                     reply_markup=kb,
                     parse_mode="HTML",
                 )
+
         else:
+            # ── Returning user ─────────────────────────────────────────────
+            lang = get_lang(user)
             await message.answer(
-                WELCOME_BACK.format(name=tg_user.first_name),
-                reply_markup=main_menu_kb(),
+                t("welcome_back", lang, name=tg_user.first_name),
+                reply_markup=main_menu_kb(lang),
                 parse_mode="HTML",
             )
+
+
+# ── Language selection (new user registration flow) ──────────────────────────
+
+@router.callback_query(F.data.startswith("lang:"), RegistrationStates.select_language)
+async def select_language(callback: CallbackQuery, state: FSMContext) -> None:
+    lang = callback.data.split(":")[1]   # e.g. "en", "zh", "ru", "pt", "tr"
+    await state.update_data(selected_lang=lang)
+    await state.set_state(RegistrationStates.waiting_for_pin)
+
+    # Show welcome + PIN creation in chosen language
+    await callback.message.edit_text(
+        t("welcome_new", lang),
+        parse_mode="HTML",
+    )
+    if _settings.WEB_APP_URL:
+        await callback.message.answer(
+            t("create_pin", lang),
+            reply_markup=pin_webapp_kb(_settings.WEB_APP_URL, "set"),
+            parse_mode="HTML",
+        )
+    else:
+        text, kb = build_pin_message(RegistrationStates.waiting_for_pin.state, 0)
+        await callback.message.answer(
+            t("create_pin", lang) + "\n\n" + text.split("\n\n", 1)[-1],
+            reply_markup=kb,
+            parse_mode="HTML",
+        )
+    await callback.answer()
+
+
+# ── Language change for existing users (called from profile) ─────────────────
+
+@router.callback_query(F.data == "profile:language")
+async def change_language_menu(callback: CallbackQuery, db_user) -> None:
+    lang = get_lang(db_user)
+    await callback.message.edit_text(
+        t("choose_language", lang),
+        reply_markup=language_select_kb(),
+        parse_mode="HTML",
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("lang:"))
+async def set_language(callback: CallbackQuery, db_user) -> None:
+    """Handle language selection for existing (logged-in) users."""
+    if not db_user:
+        await callback.answer("Please /start first.", show_alert=True)
+        return
+    new_lang = callback.data.split(":")[1]
+
+    async with AsyncSessionFactory() as session:
+        svc = UserService(session)
+        user = await svc.get_by_telegram_id(callback.from_user.id)
+        if user:
+            user.language_code = new_lang
+            await session.commit()
+
+    await callback.message.edit_text(
+        t("language_changed", new_lang),
+        reply_markup=main_menu_kb(new_lang),
+        parse_mode="HTML",
+    )
+    await callback.answer()
 
 
 # ── PIN pad submit handlers (registration) ───────────────────────────────────
@@ -102,6 +155,7 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
 async def reg_pin_submit(callback: CallbackQuery, state: FSMContext) -> None:
     data = await state.get_data()
     pin = data.get("pin_buffer", "")
+    lang = data.get("selected_lang", "en")
 
     if not pin.isdigit() or not (4 <= len(pin) <= 8):
         await callback.answer("Enter a 4–8 digit PIN.", show_alert=True)
@@ -119,15 +173,14 @@ async def reg_pin_submit(callback: CallbackQuery, state: FSMContext) -> None:
 async def reg_pin_confirm(callback: CallbackQuery, state: FSMContext) -> None:
     data = await state.get_data()
     confirm = data.get("pin_buffer", "")
+    lang = data.get("selected_lang", "en")
 
     if confirm != data.get("pin"):
-        # Reset back to entry step
         await state.update_data(pin_buffer="")
         await state.set_state(RegistrationStates.waiting_for_pin)
         text, kb = build_pin_message(RegistrationStates.waiting_for_pin.state, 0)
         await callback.message.edit_text(
-            "❌ PINs don't match. Create a new PIN:\n\n"
-            + text.split("\n\n", 1)[-1],
+            "❌ PINs don't match. Create a new PIN:\n\n" + text.split("\n\n", 1)[-1],
             reply_markup=kb,
             parse_mode="HTML",
         )
@@ -143,7 +196,7 @@ async def reg_pin_confirm(callback: CallbackQuery, state: FSMContext) -> None:
             first_name=data.get("tg_first_name", "User"),
             last_name=data.get("tg_last_name"),
             username=data.get("tg_username"),
-            language_code=data.get("tg_lang", "en"),
+            language_code=lang,
             referral_code_used=data.get("referral_code"),
         )
         await svc.set_pin(user, data["pin"])
@@ -152,10 +205,8 @@ async def reg_pin_confirm(callback: CallbackQuery, state: FSMContext) -> None:
 
     await state.clear()
     await callback.message.edit_text(
-        f"🎉 <b>Account created!</b>\n\n"
-        f"Your referral code: <code>{user.referral_code}</code>\n\n"
-        f"You're all set. Explore the menu below.",
-        reply_markup=main_menu_kb(),
+        t("account_created", lang, referral_code=user.referral_code),
+        reply_markup=main_menu_kb(lang),
         parse_mode="HTML",
     )
     await callback.answer()
@@ -164,53 +215,99 @@ async def reg_pin_confirm(callback: CallbackQuery, state: FSMContext) -> None:
 # ── Main menu ────────────────────────────────────────────────────────────────
 
 @router.callback_query(F.data == "menu:main")
-async def menu_main(callback: CallbackQuery, state: FSMContext) -> None:
+async def menu_main(callback: CallbackQuery, state: FSMContext, db_user) -> None:
     await state.clear()
+    lang = get_lang(db_user)
     await callback.message.edit_text(
         "🏠 <b>Main Menu</b>",
-        reply_markup=main_menu_kb(),
+        reply_markup=main_menu_kb(lang),
         parse_mode="HTML",
     )
     await callback.answer()
 
 
+# ── /myid debug command ───────────────────────────────────────────────────────
+
 @router.message(Command("myid"))
 async def cmd_myid(message: Message, db_user) -> None:
     is_admin = message.from_user.id in _settings.ADMIN_IDS
     role = db_user.role.value if db_user else "not registered"
+    lang = get_lang(db_user)
     await message.answer(
         f"🪪 Your Telegram ID: <code>{message.from_user.id}</code>\n"
         f"DB role: <b>{role}</b>\n"
+        f"Language: <b>{lang}</b>\n"
         f"In ADMIN_IDS: <b>{'yes ✅' if is_admin else 'no ❌'}</b>\n"
         f"ADMIN_IDS configured: <code>{_settings.ADMIN_IDS}</code>",
         parse_mode="HTML",
     )
 
 
+# ── /help ─────────────────────────────────────────────────────────────────────
+
 @router.message(Command("help"))
-async def cmd_help(message: Message) -> None:
-    await message.answer(_HELP_TEXT, parse_mode="HTML")
+async def cmd_help(message: Message, db_user) -> None:
+    lang = get_lang(db_user)
+    await message.answer(_help_text(lang), parse_mode="HTML")
 
 
 @router.callback_query(F.data == "menu:help")
-async def menu_help(callback: CallbackQuery) -> None:
-    await callback.message.edit_text(_HELP_TEXT, reply_markup=back_kb(), parse_mode="HTML")
+async def menu_help(callback: CallbackQuery, db_user) -> None:
+    lang = get_lang(db_user)
+    await callback.message.edit_text(
+        _help_text(lang),
+        reply_markup=back_kb(lang=lang),
+        parse_mode="HTML",
+    )
     await callback.answer()
 
 
-_HELP_TEXT = (
-    "ℹ️ <b>EscrowBot Help</b>\n\n"
-    "<b>Creating a deal:</b>\n"
-    "→ Tap 'New Deal', enter seller's username and deal details.\n\n"
-    "<b>Paying for a deal:</b>\n"
-    "→ After seller accepts, fund the escrow wallet shown.\n\n"
-    "<b>Releasing funds:</b>\n"
-    "→ When satisfied, tap 'Release Funds' to pay the seller.\n\n"
-    "<b>Disputes:</b>\n"
-    "→ If issues arise, tap 'Open Dispute'. Upload evidence.\n"
-    "→ A moderator will review within 24–48 hours.\n\n"
-    "<b>Security:</b>\n"
-    "→ Never share your PIN.\n"
-    "→ This bot never asks for private keys.\n\n"
-    "Support: @EscrowBotSupport"
-)
+def _help_text(lang: str = "en") -> str:
+    texts = {
+        "en": (
+            "ℹ️ <b>EscrowBot Help</b>\n\n"
+            "<b>Creating a deal:</b>\n→ Tap 'New Deal', enter seller's username and details.\n\n"
+            "<b>Paying for a deal:</b>\n→ After seller accepts, fund the escrow wallet shown.\n\n"
+            "<b>Releasing funds:</b>\n→ When satisfied, tap 'Release Funds' to pay the seller.\n\n"
+            "<b>Disputes:</b>\n→ Tap 'Open Dispute' if issues arise. A moderator reviews within 24–48h.\n\n"
+            "<b>Security:</b>\n→ Never share your PIN. This bot never asks for private keys.\n\n"
+            "Support: @EscrowBotSupport"
+        ),
+        "zh": (
+            "ℹ️ <b>EscrowBot 帮助</b>\n\n"
+            "<b>创建交易：</b>\n→ 点击「新交易」，输入卖家用户名及详情。\n\n"
+            "<b>为交易付款：</b>\n→ 卖家接受后，向显示的担保钱包转账。\n\n"
+            "<b>释放资金：</b>\n→ 满意后点击「释放资金」支付给卖家。\n\n"
+            "<b>争议：</b>\n→ 如有问题，点击「发起争议」，审核员将在 24–48 小时内处理。\n\n"
+            "<b>安全：</b>\n→ 请勿分享您的 PIN，本机器人绝不索要私钥。\n\n"
+            "支持：@EscrowBotSupport"
+        ),
+        "ru": (
+            "ℹ️ <b>Помощь EscrowBot</b>\n\n"
+            "<b>Создание сделки:</b>\n→ Нажмите «Новая сделка», введите имя продавца и детали.\n\n"
+            "<b>Оплата сделки:</b>\n→ После принятия продавцом пополните показанный кошелёк.\n\n"
+            "<b>Освобождение средств:</b>\n→ Нажмите «Освободить средства», когда будете довольны.\n\n"
+            "<b>Споры:</b>\n→ Нажмите «Открыть спор» при проблемах. Модератор ответит за 24–48ч.\n\n"
+            "<b>Безопасность:</b>\n→ Не делитесь PIN. Бот никогда не запрашивает приватные ключи.\n\n"
+            "Поддержка: @EscrowBotSupport"
+        ),
+        "pt": (
+            "ℹ️ <b>Ajuda EscrowBot</b>\n\n"
+            "<b>Criando um negócio:</b>\n→ Toque em 'Novo Negócio', insira o usuário do vendedor e detalhes.\n\n"
+            "<b>Pagando um negócio:</b>\n→ Após o vendedor aceitar, financie a carteira de garantia exibida.\n\n"
+            "<b>Liberando fundos:</b>\n→ Quando satisfeito, toque em 'Liberar Fundos' para pagar o vendedor.\n\n"
+            "<b>Disputas:</b>\n→ Toque em 'Abrir Disputa' se houver problemas. Um moderador revisa em 24–48h.\n\n"
+            "<b>Segurança:</b>\n→ Nunca compartilhe seu PIN. Este bot nunca pede chaves privadas.\n\n"
+            "Suporte: @EscrowBotSupport"
+        ),
+        "tr": (
+            "ℹ️ <b>EscrowBot Yardım</b>\n\n"
+            "<b>Anlaşma oluşturma:</b>\n→ 'Yeni Anlaşma'ya dokunun, satıcının kullanıcı adını ve detayları girin.\n\n"
+            "<b>Anlaşma ödemesi:</b>\n→ Satıcı kabul ettikten sonra gösterilen emanet cüzdanı fonlayın.\n\n"
+            "<b>Fonları serbest bırakma:</b>\n→ Memnun olduğunuzda satıcıya ödeme yapmak için 'Fonları Serbest Bırak'a dokunun.\n\n"
+            "<b>Uyuşmazlıklar:</b>\n→ Sorun çıkarsa 'Uyuşmazlık Aç'a dokunun. Moderatör 24–48 saatte inceler.\n\n"
+            "<b>Güvenlik:</b>\n→ PIN'inizi asla paylaşmayın. Bu bot hiçbir zaman özel anahtar istemez.\n\n"
+            "Destek: @EscrowBotSupport"
+        ),
+    }
+    return texts.get(lang, texts["en"])

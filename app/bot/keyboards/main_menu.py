@@ -1,45 +1,49 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+from app.i18n.translations import t
 
-def main_menu_kb() -> InlineKeyboardMarkup:
+
+def main_menu_kb(lang: str = "en") -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.row(
-        InlineKeyboardButton(text="📋 New Deal", callback_data="menu:new_deal"),
-        InlineKeyboardButton(text="📁 My Deals", callback_data="menu:my_deals"),
+        InlineKeyboardButton(text=t("btn_new_deal", lang), callback_data="menu:new_deal"),
+        InlineKeyboardButton(text=t("btn_my_deals", lang), callback_data="menu:my_deals"),
     )
     builder.row(
-        InlineKeyboardButton(text="👤 Profile", callback_data="menu:profile"),
-        InlineKeyboardButton(text="💰 Wallet", callback_data="menu:wallet"),
+        InlineKeyboardButton(text=t("btn_profile",  lang), callback_data="menu:profile"),
+        InlineKeyboardButton(text=t("btn_wallet",   lang), callback_data="menu:wallet"),
     )
     builder.row(
-        InlineKeyboardButton(text="📊 Statistics", callback_data="menu:stats"),
-        InlineKeyboardButton(text="🔗 Referral", callback_data="menu:referral"),
+        InlineKeyboardButton(text=t("btn_stats",    lang), callback_data="menu:stats"),
+        InlineKeyboardButton(text=t("btn_referral", lang), callback_data="menu:referral"),
     )
     builder.row(
-        InlineKeyboardButton(text="ℹ️ Help", callback_data="menu:help"),
+        InlineKeyboardButton(text=t("btn_help",     lang), callback_data="menu:help"),
     )
     return builder.as_markup()
 
 
-def back_kb(callback: str = "menu:main") -> InlineKeyboardMarkup:
+def back_kb(callback: str = "menu:main", lang: str = "en") -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
-        inline_keyboard=[[InlineKeyboardButton(text="⬅️ Back", callback_data=callback)]]
+        inline_keyboard=[[
+            InlineKeyboardButton(text=t("btn_back", lang), callback_data=callback)
+        ]]
     )
 
 
-def deals_list_kb(deals: list, page: int = 0, total: int = 0) -> InlineKeyboardMarkup:
+def deals_list_kb(deals: list, page: int = 0, total: int = 0, lang: str = "en") -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for deal in deals:
         status_icon = {
-            "pending": "🟡",
+            "pending":          "🟡",
             "awaiting_payment": "💳",
-            "funded": "💰",
-            "in_progress": "⚙️",
-            "completed": "✅",
-            "cancelled": "❌",
-            "disputed": "⚖️",
-            "refunded": "↩️",
+            "funded":           "💰",
+            "in_progress":      "⚙️",
+            "completed":        "✅",
+            "cancelled":        "❌",
+            "disputed":         "⚖️",
+            "refunded":         "↩️",
         }.get(deal.status.value, "❓")
         builder.row(
             InlineKeyboardButton(
@@ -56,5 +60,5 @@ def deals_list_kb(deals: list, page: int = 0, total: int = 0) -> InlineKeyboardM
     if nav_row:
         builder.row(*nav_row)
 
-    builder.row(InlineKeyboardButton(text="⬅️ Back", callback_data="menu:main"))
+    builder.row(InlineKeyboardButton(text=t("btn_back", lang), callback_data="menu:main"))
     return builder.as_markup()

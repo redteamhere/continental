@@ -43,13 +43,15 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.types import InlineKeyboardButton
 
 
-def profile_kb(has_pin: bool) -> object:
+def profile_kb(has_pin: bool, lang: str = "en") -> object:
+    from app.i18n.translations import t
     builder = InlineKeyboardBuilder()
     if has_pin:
         builder.row(InlineKeyboardButton(text="🔑 Change PIN", callback_data="profile:change_pin"))
     else:
         builder.row(InlineKeyboardButton(text="🔒 Set PIN", callback_data="profile:set_pin"))
-    builder.row(InlineKeyboardButton(text="⬅️ Back", callback_data="menu:main"))
+    builder.row(InlineKeyboardButton(text=t("btn_language", lang), callback_data="profile:language"))
+    builder.row(InlineKeyboardButton(text=t("btn_back", lang), callback_data="menu:main"))
     return builder.as_markup()
 
 
@@ -58,9 +60,11 @@ async def show_profile(callback: CallbackQuery, db_user) -> None:
     if not db_user:
         await callback.answer("Please register first with /start", show_alert=True)
         return
+    from app.i18n.translations import get_lang
+    lang = get_lang(db_user)
     await callback.message.edit_text(
         _profile_text(db_user),
-        reply_markup=profile_kb(bool(db_user.pin_hash)),
+        reply_markup=profile_kb(bool(db_user.pin_hash), lang),
         parse_mode="HTML",
     )
     await callback.answer()

@@ -47,16 +47,6 @@ def create_scheduler(bot=None) -> AsyncIOScheduler:
         max_instances=1,
     )
 
-    # Update bot short description with live user count — every hour
-    scheduler.add_job(
-        _run_update_bot_description,
-        kwargs={"bot": bot},
-        trigger=IntervalTrigger(hours=1),
-        id="update_bot_description",
-        replace_existing=True,
-        max_instances=1,
-    )
-
     return scheduler
 
 
@@ -93,22 +83,3 @@ async def _run_payment_notifications(bot=None) -> None:
         logger.error(f"[Scheduler] Payment notification error: {e}")
 
 
-async def _run_update_bot_description(bot=None) -> None:
-    """Push live monthly-active-user count to the bot's short description."""
-    if not bot:
-        return
-    try:
-        from app.database import AsyncSessionFactory
-        from app.services.user_service import UserService
-        from app.config import settings
-
-        async with AsyncSessionFactory() as session:
-            svc = UserService(session)
-            monthly = await svc.count_monthly_active()
-
-        count = monthly + settings.USER_COUNT_OFFSET
-        short_desc = f"👥 {count:,} monthly active users"
-        await bot.set_my_short_description(short_description=short_desc)
-        logger.info(f"[Scheduler] Bot short description updated: {short_desc}")
-    except Exception as e:
-        logger.error(f"[Scheduler] Bot description update error: {e}")

@@ -1,5 +1,5 @@
 from aiogram import Router
-from app.bot.handlers import start, profile, deals, payments, disputes, admin, pin_input, pin_reset, deal_chat
+from app.bot.handlers import start, profile, deals, payments, disputes, admin, pin_input, pin_reset, deal_chat, wallet
 
 def get_main_router() -> Router:
     router = Router()
@@ -11,5 +11,6 @@ def get_main_router() -> Router:
     router.include_router(deals.router)
     router.include_router(payments.router)
     router.include_router(disputes.router)
+    router.include_router(wallet.router)
     router.include_router(admin.router)
     return router

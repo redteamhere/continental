@@ -127,6 +127,22 @@ class UserService:
     async def set_role(self, user: User, role: UserRole) -> None:
         user.role = role
 
+    async def count_total(self) -> int:
+        """Total registered users."""
+        from sqlalchemy import func as sqlfunc
+        result = await self._s.execute(select(sqlfunc.count(User.id)))
+        return result.scalar_one() or 0
+
+    async def count_monthly_active(self) -> int:
+        """Users who interacted with the bot in the last 30 days."""
+        from datetime import timedelta
+        from sqlalchemy import func as sqlfunc
+        cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+        result = await self._s.execute(
+            select(sqlfunc.count(User.id)).where(User.last_active >= cutoff)
+        )
+        return result.scalar_one() or 0
+
     async def recalculate_reputation(self, user: User) -> None:
         """Recompute reputation from all received reviews."""
         from sqlalchemy import func as sqlfunc

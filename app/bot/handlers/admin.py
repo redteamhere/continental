@@ -50,12 +50,25 @@ def _is_admin_or_mod(db_user, tg_id: int = 0) -> bool:
     )
 
 
+async def _admin_panel_text() -> str:
+    """Build the admin panel header with live user stats."""
+    async with AsyncSessionFactory() as session:
+        svc = UserService(session)
+        total   = await svc.count_total()
+        monthly = await svc.count_monthly_active()
+    return (
+        f"👑 <b>Admin Panel</b>\n\n"
+        f"👥 <b>{monthly:,}</b> monthly active users\n"
+        f"📋 <b>{total:,}</b> total registered users"
+    )
+
+
 @router.message(Command("admin"))
 async def admin_panel(message: Message, db_user) -> None:
     if not _is_admin_or_mod(db_user, message.from_user.id):
         return
     await message.answer(
-        "👑 <b>Admin Panel</b>",
+        await _admin_panel_text(),
         reply_markup=admin_panel_kb(),
         parse_mode="HTML",
     )
@@ -69,7 +82,7 @@ async def admin_panel_cb(callback: CallbackQuery, state: FSMContext, db_user) ->
         return
     await state.clear()
     await callback.message.edit_text(
-        "👑 <b>Admin Panel</b>",
+        await _admin_panel_text(),
         reply_markup=admin_panel_kb(),
         parse_mode="HTML",
     )

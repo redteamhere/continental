@@ -75,6 +75,13 @@ async def on_startup() -> None:
     scheduler.start()
     logger.info("Background scheduler started.")
 
+    # Push initial user count to bot short description immediately
+    try:
+        from app.workers.scheduler import _run_update_bot_description
+        await _run_update_bot_description(bot)
+    except Exception as e:
+        logger.warning(f"Initial bot description update failed: {e}")
+
     if settings.BOT_WEBHOOK_URL:
         # Webhook mode
         webhook_url = f"{settings.BOT_WEBHOOK_URL}{settings.BOT_WEBHOOK_PATH}"

@@ -101,6 +101,11 @@ class Settings(BaseSettings):
     # ── Web App (Telegram Mini App) ──────────────────────────
     WEB_APP_URL: str = ""   # e.g. https://yourname.github.io/continental/webapp/pin.html
 
+    # ── User counter ─────────────────────────────────────────
+    # Added to the live DB count so the displayed number starts higher.
+    # Set USER_COUNT_OFFSET=54602 in Railway Variables.
+    USER_COUNT_OFFSET: int = 54602
+
     # ── App ──────────────────────────────────────────────────
     ENVIRONMENT: str = "production"
     DEBUG: bool = False

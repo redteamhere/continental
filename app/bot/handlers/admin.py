@@ -56,10 +56,11 @@ async def _admin_panel_text() -> str:
         svc = UserService(session)
         total   = await svc.count_total()
         monthly = await svc.count_monthly_active()
+    offset   = settings.USER_COUNT_OFFSET
     return (
         f"👑 <b>Admin Panel</b>\n\n"
-        f"👥 <b>{monthly:,}</b> monthly active users\n"
-        f"📋 <b>{total:,}</b> total registered users"
+        f"👥 <b>{monthly + offset:,}</b> monthly active users\n"
+        f"📋 <b>{total + offset:,}</b> total registered users"
     )
 
 

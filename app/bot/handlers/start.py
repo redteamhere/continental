@@ -78,9 +78,10 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
             # ── Returning user ─────────────────────────────────────────────
             lang = get_lang(user)
             monthly = await svc.count_monthly_active()
+            displayed = monthly + _settings.USER_COUNT_OFFSET
             await message.answer(
                 t("welcome_back", lang, name=tg_user.first_name)
-                + f"\n\n👥 <b>{monthly:,}</b> monthly active users",
+                + f"\n\n👥 <b>{displayed:,}</b> monthly active users",
                 reply_markup=main_menu_kb(lang),
                 parse_mode="HTML",
             )

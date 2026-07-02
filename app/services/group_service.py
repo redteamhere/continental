@@ -32,8 +32,9 @@ async def create_deal_group(deal_number: str) -> tuple[int, str]:
     try:
         from telethon import TelegramClient
         from telethon.sessions import StringSession
-        from telethon.tl.functions.channels import CreateChannelRequest, LeaveChannelRequest
+        from telethon.tl.functions.channels import CreateChannelRequest, EditAdminRequest
         from telethon.tl.functions.messages import ExportChatInviteRequest
+        from telethon.tl.types import ChatAdminRights
     except ImportError:
         raise RuntimeError("telethon is not installed. Run: pip install telethon")
 
@@ -80,12 +81,28 @@ async def create_deal_group(deal_number: str) -> tuple[int, str]:
 
         logger.info(f"[GroupService] Invite link: {invite_link}")
 
-        # Leave the group so the Telethon account is not visible as "owner"
+        # Set creator as anonymous admin — hides real name/photo from members.
+        # Members see "Anonymous Admin" instead of the account's identity.
         try:
-            await client(LeaveChannelRequest(channel=group))
-            logger.info(f"[GroupService] Telethon user left group {group.id} (owner hidden)")
-        except Exception as leave_err:
-            logger.warning(f"[GroupService] Could not leave group: {leave_err}")
+            await client(EditAdminRequest(
+                channel=group,
+                user_id=me,
+                admin_rights=ChatAdminRights(
+                    change_info=True,
+                    post_messages=True,
+                    edit_messages=True,
+                    delete_messages=True,
+                    ban_users=True,
+                    invite_users=True,
+                    pin_messages=True,
+                    add_admins=True,
+                    anonymous=True,
+                ),
+                rank="EscrowBot",
+            ))
+            logger.info(f"[GroupService] Creator set as anonymous admin in group {group.id}")
+        except Exception as anon_err:
+            logger.warning(f"[GroupService] Could not set anonymous admin: {anon_err}")
 
         return group.id, invite_link
 

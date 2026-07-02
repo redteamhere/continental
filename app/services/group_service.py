@@ -32,7 +32,7 @@ async def create_deal_group(deal_number: str) -> tuple[int, str]:
     try:
         from telethon import TelegramClient
         from telethon.sessions import StringSession
-        from telethon.tl.functions.channels import CreateChannelRequest
+        from telethon.tl.functions.channels import CreateChannelRequest, LeaveChannelRequest
         from telethon.tl.functions.messages import ExportChatInviteRequest
     except ImportError:
         raise RuntimeError("telethon is not installed. Run: pip install telethon")
@@ -79,6 +79,14 @@ async def create_deal_group(deal_number: str) -> tuple[int, str]:
             )
 
         logger.info(f"[GroupService] Invite link: {invite_link}")
+
+        # Leave the group so the Telethon account is not visible as "owner"
+        try:
+            await client(LeaveChannelRequest(channel=group))
+            logger.info(f"[GroupService] Telethon user left group {group.id} (owner hidden)")
+        except Exception as leave_err:
+            logger.warning(f"[GroupService] Could not leave group: {leave_err}")
+
         return group.id, invite_link
 
     finally:

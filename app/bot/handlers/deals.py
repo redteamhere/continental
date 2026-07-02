@@ -37,6 +37,10 @@ class ReleasePinState(StatesGroup):
     verify = State()
 
 
+class SellerWithdrawalState(StatesGroup):
+    waiting_for_wallet = State()
+
+
 router = Router()
 
 
@@ -534,6 +538,7 @@ async def release_pin_submit(callback: CallbackQuery, state: FSMContext) -> None
     await state.clear()
     await callback.message.edit_text(
         f"✅ <b>Funds Released!</b>\n\nDeal <code>{deal.deal_number}</code> is complete.\n"
+        f"The seller will receive their funds shortly.\n\n"
         f"Please leave a review for the seller.",
         reply_markup=review_stars_kb(deal.id),
         parse_mode="HTML",
@@ -785,6 +790,63 @@ async def dispute_enter_reason(message: Message, state: FSMContext, db_user) -> 
         f"An admin will review your case and contact both parties shortly.\n"
         f"Please do not take any further action until resolved.",
         reply_markup=back_kb("menu:my_deals"),
+        parse_mode="HTML",
+    )
+
+
+# ── Seller withdrawal wallet submission ──────────────────────
+
+@router.callback_query(F.data.startswith("seller:withdrawal_wallet:"))
+async def seller_withdrawal_start(callback: CallbackQuery, state: FSMContext, db_user) -> None:
+    deal_id = int(callback.data.split(":")[2])
+
+    async with AsyncSessionFactory() as session:
+        deal = await DealService(session).get_by_id(deal_id)
+
+    if not deal or deal.seller_id != db_user.id:
+        await callback.answer("Not authorized.", show_alert=True)
+        return
+
+    await state.update_data(withdrawal_deal_id=deal_id)
+    await state.set_state(SellerWithdrawalState.waiting_for_wallet)
+    await callback.message.answer(
+        f"📬 <b>Enter your withdrawal wallet address</b>\n\n"
+        f"Send your <b>{deal.currency.value}</b> address below.\n"
+        f"The admin will transfer <b>{deal.net_amount} {deal.currency.symbol}</b> to it.",
+        parse_mode="HTML",
+    )
+    await callback.answer()
+
+
+@router.message(SellerWithdrawalState.waiting_for_wallet)
+async def seller_wallet_received(message: Message, state: FSMContext, db_user) -> None:
+    wallet_address = (message.text or "").strip()
+    if len(wallet_address) < 10:
+        await message.answer("❌ That doesn't look like a valid wallet address. Please try again:")
+        return
+
+    data = await state.get_data()
+    deal_id = data.get("withdrawal_deal_id")
+
+    async with AsyncSessionFactory() as session:
+        deal_svc = DealService(session)
+        notif_svc = NotificationService(session, message.bot)
+        deal = await deal_svc.get_by_id(deal_id)
+
+        if not deal or deal.seller_id != db_user.id:
+            await message.answer("Deal not found.")
+            await state.clear()
+            return
+
+        buyer = await UserService(session).get_by_id(deal.buyer_id)
+        await notif_svc.admin_seller_wallet_received(deal, db_user, buyer, wallet_address)
+        await session.commit()
+
+    await state.clear()
+    await message.answer(
+        f"✅ <b>Wallet address received!</b>\n\n"
+        f"<code>{wallet_address}</code>\n\n"
+        f"The admin has been notified and will transfer your funds shortly.",
         parse_mode="HTML",
     )
 

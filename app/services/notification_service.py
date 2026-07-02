@@ -306,20 +306,43 @@ class NotificationService:
                 logger.warning(f"[Notify] Could not send action kb to {buyer.telegram_id}: {e}")
 
     async def deal_completed(self, deal: Deal, buyer: User, seller: User) -> None:
-        await self._send(
-            seller,
-            f"🎉 <b>Funds Released!</b>\n\n"
-            f"Deal <code>{deal.deal_number}</code> is complete.\n"
-            f"You will receive {deal.net_amount} {deal.currency.symbol} shortly.",
-            type="deal_completed",
-        )
+        # Notify buyer
         await self._send(
             buyer,
             f"✅ <b>Deal Complete</b>\n\n"
             f"Deal <code>{deal.deal_number}</code> closed.\n"
+            f"Funds are being transferred to the seller.\n"
             f"Please leave a review for {seller.display_name}.",
             type="deal_completed",
+            deal_id=deal.id,
         )
+
+        # Ask seller for their withdrawal wallet address
+        seller_text = (
+            f"💰 <b>Buyer Released Funds!</b>\n\n"
+            f"Deal: <code>{deal.deal_number}</code>\n"
+            f"Amount: <b>{deal.net_amount} {deal.currency.symbol}</b>\n\n"
+            f"Please provide your <b>{deal.currency.value}</b> wallet address "
+            f"to receive the funds from admin."
+        )
+        n = Notification(user_id=seller.id, type="deal_completed", message=seller_text, deal_id=deal.id)
+        self._s.add(n)
+        if self._bot:
+            from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+            kb = InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(
+                    text="📤 Send My Wallet Address",
+                    callback_data=f"seller:withdrawal_wallet:{deal.id}",
+                )
+            ]])
+            try:
+                await self._bot.send_message(
+                    seller.telegram_id, seller_text,
+                    parse_mode="HTML",
+                    reply_markup=kb,
+                )
+            except TelegramAPIError as e:
+                logger.warning(f"[Notify] Failed to send to seller {seller.telegram_id}: {e}")
 
     async def deal_cancelled(self, deal: Deal, buyer: User, seller: User) -> None:
         for user in (buyer, seller):
@@ -396,12 +419,36 @@ class NotificationService:
         buyer_line = buyer.display_name + (f" (@{buyer.username})" if buyer.username else "")
         seller_line = seller.display_name + (f" (@{seller.username})" if seller.username else "")
         await self._notify_admins(
-            f"🎉 <b>Deal Completed</b>\n\n"
-            f"Deal ID: <code>{deal.deal_number}</code>\n"
+            f"💸 <b>Funds Release — Action Required</b>\n\n"
+            f"Deal: <code>{deal.deal_number}</code>\n"
             f"Buyer: {buyer_line}\n"
             f"Seller: {seller_line}\n"
-            f"Amount: <b>{deal.amount} {deal.currency.symbol}</b>\n\n"
-            f"Buyer has released funds to the seller."
+            f"Amount: <b>{deal.net_amount} {deal.currency.symbol}</b>\n"
+            f"Network: {deal.currency.chain}\n\n"
+            f"⏳ Buyer has released funds.\n"
+            f"Seller has been asked to provide their withdrawal wallet address.\n"
+            f"You will be notified as soon as they submit it."
+        )
+
+    async def admin_seller_wallet_received(
+        self,
+        deal: Deal,
+        seller: User,
+        buyer: User,
+        wallet_address: str,
+    ) -> None:
+        """Notify admins that seller submitted their withdrawal wallet — ready to transfer."""
+        seller_line = seller.display_name + (f" (@{seller.username})" if seller.username else "")
+        buyer_line = buyer.display_name + (f" (@{buyer.username})" if buyer.username else "")
+        await self._notify_admins(
+            f"✅ <b>Seller Wallet Received — Send Funds Now</b>\n\n"
+            f"Deal: <code>{deal.deal_number}</code>\n"
+            f"Seller: {seller_line}\n"
+            f"Buyer: {buyer_line}\n"
+            f"Amount to send: <b>{deal.net_amount} {deal.currency.symbol}</b>\n"
+            f"Network: {deal.currency.chain}\n\n"
+            f"📬 <b>Send to this address:</b>\n"
+            f"<code>{wallet_address}</code>"
         )
 
     async def admin_deal_cancelled(self, deal: Deal, cancelled_by: User) -> None:

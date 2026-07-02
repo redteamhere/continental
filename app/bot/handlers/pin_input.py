@@ -295,12 +295,14 @@ async def _webapp_release_pin(message: Message, state: FSMContext, pin: str) -> 
         await escrow_svc.release_funds_to_seller(deal)
         seller = await UserService(session).get_by_id(deal.seller_id)
         await notif_svc.deal_completed(deal, user, seller)
+        await notif_svc.admin_deal_completed(deal, user, seller)
         await audit.deal_completed(user.id, deal.id)
         await session.commit()
 
     await state.clear()
     await message.answer(
         f"✅ <b>Funds Released!</b>\n\nDeal <code>{deal.deal_number}</code> is complete.\n"
+        f"The seller will receive their funds shortly.\n\n"
         f"Please leave a review for the seller.",
         reply_markup=pin_remove_kb(),
         parse_mode="HTML",

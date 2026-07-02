@@ -366,11 +366,22 @@ async def view_deal(callback: CallbackQuery, db_user) -> None:
     if deal.cancellation_reason:
         text += f"Reason: {deal.cancellation_reason}\n"
 
-    await callback.message.edit_text(
-        text,
-        reply_markup=deal_action_kb(deal, db_user.id),
-        parse_mode="HTML",
-    )
+    try:
+        await callback.message.edit_text(
+            text,
+            reply_markup=deal_action_kb(deal, db_user.id),
+            parse_mode="HTML",
+        )
+    except Exception:
+        try:
+            await callback.message.delete()
+        except Exception:
+            pass
+        await callback.bot.send_message(
+            callback.from_user.id, text,
+            reply_markup=deal_action_kb(deal, db_user.id),
+            parse_mode="HTML",
+        )
     await callback.answer()
 
 
@@ -570,13 +581,19 @@ async def seller_mark_delivered(callback: CallbackQuery, db_user) -> None:
 @router.callback_query(F.data.startswith("deal:cancel:"))
 async def cancel_deal(callback: CallbackQuery, db_user) -> None:
     deal_id = int(callback.data.split(":")[2])
-    await callback.message.edit_text(
-        "Are you sure you want to cancel this deal?",
-        reply_markup=confirm_cancel_kb(
-            confirm_data=f"deal:cancel_confirm:{deal_id}",
-            cancel_data=f"deal:view:{deal_id}",
-        ),
+    cancel_text = "Are you sure you want to cancel this deal?"
+    cancel_kb = confirm_cancel_kb(
+        confirm_data=f"deal:cancel_confirm:{deal_id}",
+        cancel_data=f"deal:view:{deal_id}",
     )
+    try:
+        await callback.message.edit_text(cancel_text, reply_markup=cancel_kb)
+    except Exception:
+        try:
+            await callback.message.delete()
+        except Exception:
+            pass
+        await callback.bot.send_message(callback.from_user.id, cancel_text, reply_markup=cancel_kb)
     await callback.answer()
 
 
@@ -602,11 +619,18 @@ async def cancel_deal_confirm(callback: CallbackQuery, db_user) -> None:
         await audit.deal_cancelled(db_user.id, deal.id, "Cancelled by user")
         await session.commit()
 
-    await callback.message.edit_text(
-        f"❌ Deal <code>{deal.deal_number}</code> cancelled.",
-        reply_markup=back_kb("menu:my_deals"),
-        parse_mode="HTML",
-    )
+    done_text = f"❌ Deal <code>{deal.deal_number}</code> cancelled."
+    done_kb = back_kb("menu:my_deals")
+    try:
+        await callback.message.edit_text(done_text, reply_markup=done_kb, parse_mode="HTML")
+    except Exception:
+        try:
+            await callback.message.delete()
+        except Exception:
+            pass
+        await callback.bot.send_message(
+            callback.from_user.id, done_text, reply_markup=done_kb, parse_mode="HTML"
+        )
     await callback.answer()
 
 

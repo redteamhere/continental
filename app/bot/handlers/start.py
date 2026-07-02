@@ -262,11 +262,16 @@ async def cmd_help(message: Message, db_user) -> None:
 @router.callback_query(F.data == "menu:help")
 async def menu_help(callback: CallbackQuery, db_user) -> None:
     lang = get_lang(db_user)
-    await callback.message.edit_text(
-        _help_text(lang),
-        reply_markup=back_kb(lang=lang),
-        parse_mode="HTML",
-    )
+    text = _help_text(lang)
+    kb = back_kb(lang=lang)
+    try:
+        await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+    except Exception:
+        try:
+            await callback.message.delete()
+        except Exception:
+            pass
+        await callback.bot.send_message(callback.from_user.id, text, reply_markup=kb, parse_mode="HTML")
     await callback.answer()
 
 

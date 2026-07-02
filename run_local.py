@@ -31,12 +31,22 @@ async def _migrate_columns() -> None:
         "ALTER TABLE deals ADD COLUMN IF NOT EXISTS chat_invite_link VARCHAR(256)",
         # Make private_key_encrypted nullable (cold wallets have no managed key)
         "ALTER TABLE wallets ALTER COLUMN private_key_encrypted DROP NOT NULL",
-        # Add new chain types if they don't exist yet
-        "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel='BSC' AND enumtypid=(SELECT oid FROM pg_type WHERE typname='chain')) THEN ALTER TYPE chain ADD VALUE 'BSC'; END IF; END $$",
-        # Add new currency types
-        "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel='USDT_BEP20' AND enumtypid=(SELECT oid FROM pg_type WHERE typname='currency')) THEN ALTER TYPE currency ADD VALUE 'USDT_BEP20'; END IF; END $$",
-        "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel='USDT_ERC20' AND enumtypid=(SELECT oid FROM pg_type WHERE typname='currency')) THEN ALTER TYPE currency ADD VALUE 'USDT_ERC20'; END IF; END $$",
-        "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel='BTC' AND enumtypid=(SELECT oid FROM pg_type WHERE typname='currency')) THEN ALTER TYPE currency ADD VALUE 'BTC'; END IF; END $$",
+        # Chain enum values
+        "ALTER TYPE chain ADD VALUE IF NOT EXISTS 'BSC'",
+        "ALTER TYPE chain ADD VALUE IF NOT EXISTS 'DOGECOIN'",
+        "ALTER TYPE chain ADD VALUE IF NOT EXISTS 'FANTOM'",
+        "ALTER TYPE chain ADD VALUE IF NOT EXISTS 'TON'",
+        # Currency enum values
+        "ALTER TYPE currency ADD VALUE IF NOT EXISTS 'USDT_BEP20'",
+        "ALTER TYPE currency ADD VALUE IF NOT EXISTS 'USDT_ERC20'",
+        "ALTER TYPE currency ADD VALUE IF NOT EXISTS 'USDT_TON'",
+        "ALTER TYPE currency ADD VALUE IF NOT EXISTS 'ETH'",
+        "ALTER TYPE currency ADD VALUE IF NOT EXISTS 'BNB'",
+        "ALTER TYPE currency ADD VALUE IF NOT EXISTS 'LTC'",
+        "ALTER TYPE currency ADD VALUE IF NOT EXISTS 'DOGE'",
+        "ALTER TYPE currency ADD VALUE IF NOT EXISTS 'TRX'",
+        "ALTER TYPE currency ADD VALUE IF NOT EXISTS 'TON'",
+        "ALTER TYPE currency ADD VALUE IF NOT EXISTS 'FTM'",
     ]
     async with engine.begin() as conn:
         for stmt in stmts:

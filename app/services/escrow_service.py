@@ -107,40 +107,51 @@ class EscrowService:
         """
         Send escrowed funds to the seller's external withdrawal address.
         Returns the outgoing transaction hash, or None if dry-run / not implemented.
-
-        NOTE: Implement per-chain signing logic here.
-        For USDT TRC20 this uses TronPy; for BTC/ETH use respective signing libraries.
         """
         wallet = await self.get_wallet_for_deal(deal)
         if not wallet:
             raise ValueError(f"No escrow wallet for deal {deal.deal_number}")
 
-        # In a full implementation: get seller's withdrawal address from their profile,
-        # sign the transaction with the decrypted private key, and broadcast it.
-        # The private key is used only within this function scope and never stored.
-        private_key = decrypt_private_key(wallet.private_key_encrypted)
+        from datetime import datetime, timezone
 
-        # For now we log intent; real signing is chain-specific
+        if wallet.private_key_encrypted == "COLD_WALLET" or not wallet.private_key_encrypted:
+            # Cold wallet — admin transfers manually; bot just marks as swept
+            logger.info(
+                f"[Escrow] Cold wallet release logged for deal {deal.deal_number} "
+                f"({deal.net_amount} {deal.currency.value}) — admin handles transfer manually"
+            )
+            wallet.is_swept = True
+            wallet.swept_at = datetime.now(timezone.utc)
+            return None
+
+        # HD wallet — decrypt key and sign (chain-specific signing goes here)
+        private_key = decrypt_private_key(wallet.private_key_encrypted)
         logger.info(
             f"[Escrow] Releasing {deal.net_amount} {deal.currency.value} "
             f"from {wallet.address[:16]}... to seller (deal {deal.deal_number})"
         )
+        del private_key  # zero out immediately after use
 
-        # Zero out in-memory key reference immediately
-        del private_key
-
-        # Mark wallet as swept
         wallet.is_swept = True
-        from datetime import datetime, timezone
         wallet.swept_at = datetime.now(timezone.utc)
-
-        return None  # Replace with actual tx_hash after broadcasting
+        return None
 
     async def refund_to_buyer(self, deal: Deal, buyer_address: str) -> Optional[str]:
         """Return funds to buyer's address."""
         wallet = await self.get_wallet_for_deal(deal)
         if not wallet:
             raise ValueError(f"No escrow wallet for deal {deal.deal_number}")
+
+        from datetime import datetime, timezone
+
+        if wallet.private_key_encrypted == "COLD_WALLET" or not wallet.private_key_encrypted:
+            logger.info(
+                f"[Escrow] Cold wallet refund logged for deal {deal.deal_number} "
+                f"({deal.amount} {deal.currency.value}) — admin handles refund manually"
+            )
+            wallet.is_swept = True
+            wallet.swept_at = datetime.now(timezone.utc)
+            return None
 
         private_key = decrypt_private_key(wallet.private_key_encrypted)
         logger.info(
@@ -151,6 +162,5 @@ class EscrowService:
         del private_key
 
         wallet.is_swept = True
-        from datetime import datetime, timezone
         wallet.swept_at = datetime.now(timezone.utc)
         return None

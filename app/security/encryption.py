@@ -37,7 +37,9 @@ def decrypt(token: str) -> str:
     """Decrypt AES-256-GCM token. Returns plaintext string."""
     key = _get_key()
     aesgcm = AESGCM(key)
-    combined = base64.urlsafe_b64decode(token.encode("ascii"))
+    # Restore stripped base64 padding before decoding
+    padded = token + "=" * (-len(token) % 4)
+    combined = base64.urlsafe_b64decode(padded.encode("ascii"))
     nonce = combined[:12]
     ciphertext = combined[12:]
     plaintext = aesgcm.decrypt(nonce, ciphertext, None)

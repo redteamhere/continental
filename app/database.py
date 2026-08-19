@@ -18,20 +18,34 @@ class Base(DeclarativeBase):
 
 
 def _build_engine() -> AsyncEngine:
+    import os as _os
+
+    mysql_url = _os.getenv("MYSQL_URL", "")
+    if mysql_url:
+        url = mysql_url.replace("mysql://", "mysql+aiomysql://", 1)
+        return create_async_engine(
+            url,
+            echo=settings.DEBUG,
+            pool_pre_ping=True,
+            pool_size=5,
+            max_overflow=10,
+            pool_timeout=30,
+            pool_recycle=1800,
+        )
+
+    # PostgreSQL fallback (Neon or custom)
     url = settings.DATABASE_URL
-    # Strip query params that asyncpg doesn't understand (sslmode, channel_binding)
-    # and re-add SSL via connect_args instead.
+    url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    url = url.replace("postgres://", "postgresql+asyncpg://", 1)
     needs_ssl = "neon.tech" in url or "sslmode" in url
     clean_url = url.split("?")[0]
-
-    connect_args = {}
+    connect_args: dict = {}
     if needs_ssl:
         import ssl as _ssl
         ctx = _ssl.create_default_context()
         ctx.check_hostname = False
         ctx.verify_mode = _ssl.CERT_NONE
         connect_args["ssl"] = ctx
-
     return create_async_engine(
         clean_url,
         echo=settings.DEBUG,

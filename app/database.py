@@ -30,7 +30,6 @@ def _build_engine() -> AsyncEngine:
     return create_async_engine(
         url,
         echo=settings.DEBUG,
-        pool_pre_ping=True,
         pool_size=5,
         max_overflow=10,
         pool_timeout=30,
